@@ -1,10 +1,90 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText } from 'lucide-react';
+import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText, Camera, Image, Trash } from 'lucide-react';
 
 export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId }) {
   const [paths, setPaths] = useState([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [isImageExpanded, setIsImageExpanded] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState(zone.image_url || '');
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setCurrentImageUrl(zone.image_url || '');
+  }, [zone]);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `zones/${zone.id}_${Date.now()}.${fileExt}`;
+
+      // 1. Upload file to Supabase Storage bucket 'tip-photos'
+      const { data: storageData, error: uploadError } = await supabase.storage
+        .from('tip-photos')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('tip-photos')
+        .getPublicUrl(fileName);
+
+      // 3. Update rn_route_zones table with the new image_url
+      const { error: dbError } = await supabase
+        .from('rn_route_zones')
+        .update({
+          image_url: publicUrl,
+          updated_by: currentUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', zone.id);
+
+      if (dbError) throw dbError;
+
+      setCurrentImageUrl(publicUrl);
+      zone.image_url = publicUrl; // Update local reference
+      alert('구역 이미지 팁이 등록되었습니다.');
+    } catch (err) {
+      console.error('Error uploading zone image:', err);
+      alert('이미지 업로드 실패: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageDelete = async () => {
+    if (!confirm('등록된 구역 이미지 팁을 삭제하시겠습니까?')) return;
+
+    setUploading(true);
+    try {
+      // Update rn_route_zones table set image_url to null
+      const { error: dbError } = await supabase
+        .from('rn_route_zones')
+        .update({
+          image_url: null,
+          updated_by: currentUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', zone.id);
+
+      if (dbError) throw dbError;
+
+      setCurrentImageUrl('');
+      zone.image_url = null; // Update local reference
+      alert('구역 이미지 팁이 삭제되었습니다.');
+    } catch (err) {
+      console.error('Error deleting zone image:', err);
+      alert('이미지 삭제 실패: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (!zone) return;
@@ -72,6 +152,63 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         >
           <Plus size={18} /> 이 위치에 배송팁 등록
         </button>
+      )}
+
+      {/* Zone Image Tip Section */}
+      <div style={{ marginBottom: '16px' }}>
+        {currentImageUrl ? (
+          <div>
+            <div style={styles.zoneImageWrapper} onClick={() => setIsImageExpanded(true)}>
+              <img src={currentImageUrl} alt={`${zone.name} 구역 전체 팁`} style={styles.zoneImage} />
+            </div>
+            {currentUser && currentUser.role !== 'viewer' && (
+              <div style={styles.imageActions}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ ...styles.actionBtn, padding: '8px 12px', minHeight: '36px', fontSize: '13px' }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Camera size={14} /> 이미지 변경
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ ...styles.actionBtn, padding: '8px 12px', minHeight: '36px', fontSize: '13px', backgroundColor: 'var(--danger)', color: '#FFFFFF' }}
+                  onClick={handleImageDelete}
+                  disabled={uploading}
+                >
+                  <Trash size={14} /> 이미지 삭제
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          currentUser && currentUser.role !== 'viewer' && (
+            <div style={styles.imagePlaceholderBtn} onClick={() => fileInputRef.current?.click()}>
+              <Camera size={24} color="var(--text-secondary)" />
+              <span style={styles.imagePlaceholderText}>
+                {uploading ? '업로드 중...' : '➕ 이 구역 전체의 이미지 팁 등록 (배치도 등)'}
+              </span>
+            </div>
+          )
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleImageUpload}
+          style={{ display: 'none' }}
+        />
+      </div>
+
+      {/* Image Zoom Lightbox Modal */}
+      {isImageExpanded && (
+        <div style={styles.imageModalOverlay} onClick={() => setIsImageExpanded(false)}>
+          <img src={currentImageUrl} alt={`${zone.name} 구역 전체 팁`} style={styles.imageModalContent} />
+          <button style={styles.imageModalCloseBtn} onClick={() => setIsImageExpanded(false)}>✕</button>
+        </div>
       )}
 
       {/* Zone Memo */}
@@ -380,5 +517,88 @@ const styles = {
     fontSize: '13px',
     color: 'var(--text-primary)',
     fontWeight: '500',
+  },
+  zoneImageWrapper: {
+    width: '100%',
+    maxHeight: '220px',
+    borderRadius: 'var(--radius-md)',
+    overflow: 'hidden',
+    border: '1px solid var(--bg-card-border)',
+    marginBottom: '10px',
+    cursor: 'pointer',
+    position: 'relative',
+    backgroundColor: '#121824',
+  },
+  zoneImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    display: 'block',
+    maxHeight: '220px',
+    margin: '0 auto',
+  },
+  imageActions: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '10px',
+  },
+  imagePlaceholderBtn: {
+    width: '100%',
+    padding: '20px',
+    borderRadius: 'var(--radius-md)',
+    border: '1.5px dashed var(--bg-card-border)',
+    backgroundColor: 'var(--bg-input)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    marginBottom: '16px',
+    transition: 'all var(--transition-fast)',
+  },
+  imagePlaceholderText: {
+    fontSize: '13px',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  imageModalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    zIndex: 2000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+  },
+  imageModalContent: {
+    maxWidth: '100%',
+    maxHeight: '90vh',
+    objectFit: 'contain',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+  },
+  imageModalCloseBtn: {
+    position: 'absolute',
+    top: '24px',
+    right: '24px',
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    border: 'none',
+    color: '#FFFFFF',
+    fontSize: '20px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.2s',
   },
 };

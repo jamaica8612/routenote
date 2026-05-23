@@ -5,6 +5,18 @@ import { CheckCircle, Shield, MapPin, Truck, Key } from 'lucide-react';
 export default function AuthScreen({ onDemoLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [clickCount, setClickCount] = useState(0);
+  const [showDemos, setShowDemos] = useState(false);
+
+  const handleLogoClick = () => {
+    const nextCount = clickCount + 1;
+    setClickCount(nextCount);
+    if (nextCount >= 5) {
+      setShowDemos(true);
+      setClickCount(0);
+      alert('개발자 테스트 데모 모드가 활성화되었습니다.');
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -35,7 +47,7 @@ export default function AuthScreen({ onDemoLogin }) {
 
       <div className="glass" style={styles.loginCard}>
         {/* Logo and App Title */}
-        <div style={styles.logoContainer}>
+        <div style={styles.logoContainer} onClick={handleLogoClick}>
           <div style={styles.logoIcon}>
             <Truck size={32} color="#FFFFFF" />
           </div>
@@ -80,33 +92,49 @@ export default function AuthScreen({ onDemoLogin }) {
           {loading ? '로그인 연결 중...' : '구글 계정으로 로그인'}
         </button>
 
-        {/* Local/Demo Testing Area */}
-        <div style={styles.dividerContainer}>
-          <div style={styles.dividerLine}></div>
-          <span style={styles.dividerText}>또는 테스트 모드</span>
-          <div style={styles.dividerLine}></div>
-        </div>
+        {/* Guest Mode Button */}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={styles.guestBtn}
+          onClick={() => onDemoLogin({ id: 'demo-viewer-id', email: 'guest@routenote.com', name: '둘러보기 손님', role: 'viewer', avatar_url: '' })}
+          disabled={loading}
+          title="로그인 없이 배송팁 조회하기"
+        >
+          로그인 없이 둘러보기
+        </button>
 
-        <p style={styles.demoNotice}>
-          OAuth 설정 전이거나 빠른 확인을 원하시면, 아래 데모 버튼을 클릭하여 관리자(Admin) 또는 멤버(Member) 권한으로 즉시 웹앱을 사용해볼 수 있습니다.
-        </p>
+        {/* Local/Demo Testing Area (Secret Easter Egg) */}
+        {showDemos && (
+          <div style={{ marginTop: '20px', animation: 'fadeIn 0.3s ease-out' }}>
+            <div style={styles.dividerContainer}>
+              <div style={styles.dividerLine}></div>
+              <span style={styles.dividerText}>테스트 데모 모드</span>
+              <div style={styles.dividerLine}></div>
+            </div>
 
-        <div style={styles.demoBtnGroup}>
-          <button
-            className="btn btn-secondary"
-            style={{ ...styles.demoBtn, borderColor: '#6366F1' }}
-            onClick={() => onDemoLogin({ id: 'demo-admin-id', email: 'admin@routenote.com', name: '홍길동(관리자)', role: 'admin', avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80' })}
-          >
-            관리자 데모 시작
-          </button>
-          <button
-            className="btn btn-secondary"
-            style={styles.demoBtn}
-            onClick={() => onDemoLogin({ id: 'demo-member-id', email: 'driver@routenote.com', name: '이몽룡(기사님)', role: 'member', avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=100&q=80' })}
-          >
-            일반 멤버 데모 시작
-          </button>
-        </div>
+            <p style={styles.demoNotice}>
+              아래 데모 버튼을 클릭하여 관리자(Admin) 또는 멤버(Member) 권한으로 즉시 웹앱을 사용해볼 수 있습니다.
+            </p>
+
+            <div style={styles.demoBtnGroup}>
+              <button
+                className="btn btn-secondary"
+                style={{ ...styles.demoBtn, borderColor: '#6366F1' }}
+                onClick={() => onDemoLogin({ id: 'demo-admin-id', email: 'admin@routenote.com', name: '홍길동(관리자)', role: 'admin', avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80' })}
+              >
+                관리자 데모 시작
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={styles.demoBtn}
+                onClick={() => onDemoLogin({ id: 'demo-member-id', email: 'driver@routenote.com', name: '이몽룡(기사님)', role: 'member', avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=100&q=80' })}
+              >
+                일반 멤버 데모 시작
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -220,7 +248,24 @@ const styles = {
     fontWeight: '600',
     borderRadius: '14px',
     padding: '16px',
+    marginBottom: '12px',
+  },
+  guestBtn: {
+    width: '100%',
+    fontSize: '16px',
+    fontWeight: '600',
+    borderRadius: '14px',
+    padding: '16px',
+    height: '52px',
+    backgroundColor: 'var(--bg-input)',
+    border: '1.5px solid var(--bg-card-border)',
+    color: 'var(--text-primary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
     marginBottom: '24px',
+    transition: 'all var(--transition-fast)',
   },
   dividerContainer: {
     display: 'flex',

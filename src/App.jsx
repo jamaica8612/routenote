@@ -144,6 +144,10 @@ export default function App() {
   };
 
   const openTipForm = (lat, lng, tip = null) => {
+    if (currentUser?.role === 'viewer') {
+      alert('둘러보기 모드에서는 배송팁을 등록/수정할 수 없습니다.');
+      return;
+    }
     setSelectedTip(tip);
     setClickLat(lat);
     setClickLng(lng);
@@ -436,29 +440,16 @@ export default function App() {
         </button>
       )}
 
-      {/* 3.5. BOTTOM LEFT FLOATING ACTIONS */}
+      {/* 3.5. FLOATING COMPASS BUTTON */}
       {!isDrawingZone && !isDrawingPath && (
-        <div style={styles.floatingUI}>
-          {/* GPS Current Location Tip Register */}
-          <button
-            className="btn btn-primary btn-icon"
-            onClick={handleCurrentLocationRegister}
-            title="현재 위치에 배송팁 등록"
-            style={{ ...styles.circleFloatBtn, backgroundColor: 'var(--success)', color: '#FFFFFF' }}
-          >
-            <Plus size={24} />
-          </button>
-
-          {/* Move to Current Location Button */}
-          <button
-            className="btn btn-secondary btn-icon glass"
-            onClick={handleMoveToCurrentLocation}
-            title="현재 위치로 지도 이동"
-            style={styles.circleFloatBtn}
-          >
-            <Compass size={20} color="var(--primary)" />
-          </button>
-        </div>
+        <button
+          className="btn btn-icon"
+          onClick={handleMoveToCurrentLocation}
+          title="현재 위치로 지도 이동"
+          style={styles.floatingCompassBtn(currentUser?.role === 'admin')}
+        >
+          <Compass size={20} color="#FFFFFF" />
+        </button>
       )}
 
       {/* 4. MODAL SLIDE BOTTOM SHEET */}
@@ -495,27 +486,29 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F43F5E', // Rose red for high visibility and logout concept
-    border: 'none',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)', // Black semi-transparent
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     cursor: 'pointer',
   },
-  floatingUI: {
+  floatingCompassBtn: (isAdmin) => ({
     position: 'absolute',
-    bottom: '40px', // Raised slightly to avoid Naver Corp copyright overlap
-    left: '16px',
-    zIndex: 850,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  circleFloatBtn: {
-    borderRadius: '50%',
+    bottom: '40px',
+    left: isAdmin ? '16px' : 'auto',
+    right: isAdmin ? 'auto' : '16px',
     width: '54px',
     height: '54px',
+    borderRadius: '50%',
     boxShadow: 'var(--shadow-md)',
+    zIndex: 850,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)', // Black semi-transparent
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     cursor: 'pointer',
-  },
+  }),
 };

@@ -63,14 +63,31 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
           const matchesTags = t.tags && t.tags.some(tag => tag.toLowerCase().includes(lowerVal));
           return matchesTitle || matchesMemo || matchesTags;
         })
-        .map(t => ({
-          type: 'tip',
-          id: t.id,
-          title: t.title,
-          subtitle: `${t.marker_type} | ${t.memo || ''}`,
-          icon: <MapPin size={16} color="#10B981" />,
-          data: t,
-        }));
+        .map(t => {
+          const zone = zones.find(z => z.id === t.zone_id);
+          const zonePrefix = zone ? `[${zone.name}] ` : '';
+          
+          const markerTypeLabels = {
+            vehicle_entrance: '차량 진입구',
+            parking: '정차/주차',
+            entrance: '출입구/공동현관',
+            elevator: '엘리베이터',
+            delivery_spot: '배송 위치',
+            warning: '주의',
+            access_code: '비번/호출',
+            important: '중요'
+          };
+          const typeLabel = markerTypeLabels[t.marker_type] || t.marker_type;
+
+          return {
+            type: 'tip',
+            id: t.id,
+            title: t.title,
+            subtitle: `${zonePrefix}${typeLabel} | ${t.memo || ''}`,
+            icon: <MapPin size={16} color="#10B981" />,
+            data: t,
+          };
+        });
       searchResults.push(...matchedTips);
 
       // 3. Search Naver Geocoding Proxy via Supabase Edge Function (Priority 3)

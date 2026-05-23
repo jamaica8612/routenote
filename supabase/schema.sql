@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.rn_route_zones (
     polygon JSONB NOT NULL, -- GeoJSON Polygon
     color TEXT,
     memo TEXT,
+    image_url TEXT, -- Zone-wide tip image
     created_by UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
     updated_by UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT now(),

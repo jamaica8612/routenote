@@ -67,7 +67,19 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     // Snap to resolved nearest roadview coordinates, fallback to tip coordinates if unresolved
     const lat = roadviewCoords?.lat || tip.lat;
     const lng = roadviewCoords?.lng || tip.lng;
-    const roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
+
+    // Detect mobile device to bypass universal link native app redirection
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    let roadviewUrl;
+    if (isMobile) {
+      // Mobile-optimized Naver Map panorama viewer URL which opens directly in the mobile browser
+      roadviewUrl = `https://m.map.naver.com/viewer/panorama.naver?latitude=${lat}&longitude=${lng}`;
+    } else {
+      // Desktop full-featured V5 URL
+      roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
+    }
+
     window.open(roadviewUrl, '_blank');
   };
 
@@ -333,43 +345,53 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
         {/* Row 2: Verification & History */}
         <div style={styles.subActions}>
-          <button
-            className="btn btn-secondary"
-            style={styles.subBtn}
-            onClick={handleVerify}
-            disabled={verifying}
-          >
-            <Check size={16} color="var(--success)" />
-            <span>{verifying ? '확인 중...' : '이 팁 아직 맞음'}</span>
-          </button>
+          {currentUser && currentUser.role !== 'viewer' ? (
+            <>
+              <button
+                className="btn btn-secondary"
+                style={styles.subBtn}
+                onClick={handleVerify}
+                disabled={verifying}
+              >
+                <Check size={16} color="var(--success)" />
+                <span>{verifying ? '확인 중...' : '이 팁 아직 맞음'}</span>
+              </button>
 
-          <button className="btn btn-secondary" style={styles.subBtn} onClick={handleFetchHistory} title="변경 이력">
-            <span>이력 보기</span>
-          </button>
-        </div>
-
-        {/* Row 3: Modify Actions Group (Edit & Delete) */}
-        <div style={styles.subActions}>
-          <button className="btn btn-secondary" style={styles.subBtn} onClick={() => onEdit(tip)}>
-            <Edit3 size={16} color="var(--primary)" />
-            <span>수정</span>
-          </button>
-
-          {currentUser && currentUser.role === 'admin' && (
-            <button
-              className="btn btn-danger"
-              style={styles.deleteBtn}
-              onClick={() => {
-                if (confirm('이 배송팁을 정말 삭제하시겠습니까? (숨김 처리됨)')) {
-                  onDelete(tip.id);
-                }
-              }}
-            >
-              <Trash2 size={16} />
-              <span>삭제</span>
+              <button className="btn btn-secondary" style={styles.subBtn} onClick={handleFetchHistory} title="변경 이력">
+                <span>이력 보기</span>
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-secondary" style={{ ...styles.subBtn, flex: 1 }} onClick={handleFetchHistory} title="변경 이력">
+              <span>변경 이력 보기</span>
             </button>
           )}
         </div>
+
+        {/* Row 3: Modify Actions Group (Edit & Delete) */}
+        {currentUser && currentUser.role !== 'viewer' && (
+          <div style={styles.subActions}>
+            <button className="btn btn-secondary" style={styles.subBtn} onClick={() => onEdit(tip)}>
+              <Edit3 size={16} color="var(--primary)" />
+              <span>수정</span>
+            </button>
+
+            {currentUser.role === 'admin' && (
+              <button
+                className="btn btn-danger"
+                style={styles.deleteBtn}
+                onClick={() => {
+                  if (confirm('이 배송팁을 정말 삭제하시겠습니까? (숨김 처리됨)')) {
+                    onDelete(tip.id);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+                <span>삭제</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* HISTORY MODAL (SLIDE OVERLAY) */}
