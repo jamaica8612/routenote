@@ -1,1 +1,8 @@
 project_id = "routenote"
+
+[functions.rn-postcode-zone]
+verify_jwt = false
+
+[functions.rn-geocode]
+verify_jwt = false
+
