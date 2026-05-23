@@ -303,8 +303,12 @@ export default function App() {
             zone={selectedZone}
             polygonCoords={drawCoords}
             currentUser={currentUser}
-            onSave={() => {
+            onSave={(savedZone) => {
               fetchData();
+              if (savedZone) {
+                setSelectedResult({ type: 'zone', data: savedZone });
+                setSelectedZone(savedZone);
+              }
               setSheetOpen(false);
               setIsDrawingZone(false);
               setDrawCoords([]);
@@ -313,6 +317,11 @@ export default function App() {
               setSheetOpen(false);
               setIsDrawingZone(false);
               setDrawCoords([]);
+            }}
+            onStartDrawing={() => {
+              setSheetOpen(false);
+              setDrawCoords([[]]);
+              setIsDrawingZone(true);
             }}
           />
         );
@@ -395,6 +404,13 @@ export default function App() {
         drawCoords={drawCoords}
         setDrawCoords={setDrawCoords}
         selectedZone={selectedZone} // [New Prop] Pass currently open zone detail
+        onCreateZone={() => {
+          setSelectedZone(null);
+          setDrawCoords([]);
+          setSheetTitle('배송구역 만들기');
+          setSheetContent('zone-form');
+          setSheetOpen(true);
+        }}
         onFinishDrawingZone={() => {
           setSelectedZone(null);
           setSheetTitle('새 배송구역 등록');
@@ -432,7 +448,7 @@ export default function App() {
           >
             <Plus size={24} />
           </button>
-          
+
           {/* Move to Current Location Button */}
           <button
             className="btn btn-secondary btn-icon glass"

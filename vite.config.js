@@ -5,4 +5,13 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  server: {
+    proxy: {
+      '/juso-api': {
+        target: 'https://www.juso.go.kr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/juso-api/, ''),
+      },
+    },
+  },
 })

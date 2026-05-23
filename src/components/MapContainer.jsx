@@ -14,6 +14,49 @@ const MARKER_TYPES = {
   important: { emoji: '⭐', label: '중요' },
 };
 
+function getZoneBounds(polygon) {
+  if (!polygon?.coordinates?.length || !window.naver?.maps) return null;
+
+  const points = [];
+
+  if (polygon.type === 'MultiPolygon') {
+    polygon.coordinates.forEach(coordsGroup => {
+      (coordsGroup[0] || []).forEach(([lng, lat]) => points.push({ lat, lng }));
+    });
+  } else if (polygon.type === 'Polygon') {
+    (polygon.coordinates[0] || []).forEach(([lng, lat]) => points.push({ lat, lng }));
+  }
+
+  if (points.length === 0) return null;
+
+  const lats = points.map(point => point.lat);
+  const lngs = points.map(point => point.lng);
+  const southWest = new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
+  const northEast = new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
+
+  return new window.naver.maps.LatLngBounds(southWest, northEast);
+}
+
+function fitZoneOnMap(mapInstance, zone) {
+  const bounds = getZoneBounds(zone.polygon);
+  if (bounds) {
+    mapInstance.fitBounds(bounds, {
+      top: 120,
+      right: 36,
+      bottom: Math.min(320, Math.round(window.innerHeight * 0.38)),
+      left: 36,
+    });
+    return;
+  }
+
+  const centroid = getPolygonCentroid(zone.polygon);
+  if (centroid) {
+    const centerLatLng = new window.naver.maps.LatLng(centroid.lat, centroid.lng);
+    mapInstance.setCenter(centerLatLng);
+    mapInstance.setZoom(17);
+  }
+}
+
 export default function MapContainer({
   zones,
   tips,
@@ -32,6 +75,7 @@ export default function MapContainer({
   drawCoords, // Format: Double Array [ [ {lat,lng}, ... ], [ ... ] ]
   setDrawCoords,
   selectedZone, // [New Prop] Accept currently open/focused zone
+  onCreateZone,
   onFinishDrawingZone,
   onFinishDrawingPath,
 }) {
@@ -174,13 +218,8 @@ export default function MapContainer({
       onMarkerClick(selectedResult.data);
     } else if (selectedResult.type === 'zone') {
       const zone = selectedResult.data;
-      const centroid = getPolygonCentroid(zone.polygon);
-      if (centroid) {
-        const centerLatLng = new window.naver.maps.LatLng(centroid.lat, centroid.lng);
-        mapInstance.setCenter(centerLatLng);
-        mapInstance.setZoom(17);
-        onZoneClick(zone);
-      }
+      fitZoneOnMap(mapInstance, zone);
+      onZoneClick(zone);
     }
   }, [selectedResult, mapInstance]);
 
@@ -623,8 +662,12 @@ export default function MapContainer({
             className="btn btn-primary"
             style={styles.actionFloatBtn}
             onClick={() => {
-              setIsDrawingZone(true);
-              setDrawCoords([[]]);
+              if (onCreateZone) {
+                onCreateZone();
+              } else {
+                setIsDrawingZone(true);
+                setDrawCoords([[]]);
+              }
             }}
             title="새 구역 그리기"
           >
