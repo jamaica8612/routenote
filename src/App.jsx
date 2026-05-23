@@ -10,6 +10,7 @@ import ZoneForm from './components/ZoneForm';
 import ZoneDetail from './components/ZoneDetail';
 import PathForm from './components/PathForm';
 import { Compass, LogOut, Plus, MapPin } from 'lucide-react';
+import { getDbUserId } from './utils/userUtils';
 
 export default function App() {
   // Authentication States
@@ -191,7 +192,7 @@ export default function App() {
               try {
                 const { error } = await supabase
                   .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
-                  .update({ is_deleted: true, updated_by: currentUser.id })
+                  .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', tipId);
                 if (error) throw error;
                 fetchData();
@@ -236,7 +237,7 @@ export default function App() {
               try {
                 const { error } = await supabase
                   .from('rn_route_zones') // [Prefix Update] route_zones -> rn_route_zones
-                  .update({ is_deleted: true, updated_by: currentUser.id })
+                  .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', zoneId);
                 if (error) throw error;
                 fetchData();

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { isPointInPolygon } from '../utils/geoUtils';
 import { Camera, Trash, AlertTriangle, Info } from 'lucide-react';
+import { getDbUserId } from '../utils/userUtils';
 
 const MARKER_TYPES = [
   { id: 'vehicle_entrance', emoji: '🚗', label: '차량 진입구' },
@@ -73,6 +74,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
     setError(null);
 
     const uploadedList = [...photos];
+    const dbUserId = getDbUserId(currentUser);
 
     try {
       for (const file of files) {
@@ -94,7 +96,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
         // 3. Keep in temporary state (will insert to DB upon form save, or if existing tip, upload instantly)
         const newPhotoObj = {
           storage_path: publicUrl,
-          uploaded_by: currentUser.id,
+          uploaded_by: dbUserId,
           is_new: true,
           file: file,
           dbPath: fileName
@@ -107,7 +109,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
             .insert({
               tip_id: tip.id,
               storage_path: publicUrl,
-              uploaded_by: currentUser.id,
+              uploaded_by: dbUserId,
             })
             .select()
             .single();
@@ -178,6 +180,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
 
     try {
       let savedTipId = tip ? tip.id : null;
+      const dbUserId = getDbUserId(currentUser);
 
       if (tip) {
         // UPDATE Existing Tip
@@ -189,7 +192,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
             memo: memo.trim(),
             tags: parsedTags,
             zone_id: zoneId || null,
-            updated_by: currentUser.id,
+            updated_by: dbUserId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', tip.id)
@@ -208,10 +211,10 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
             lng,
             tags: parsedTags,
             zone_id: zoneId || null,
-            created_by: currentUser.id,
-            updated_by: currentUser.id,
+            created_by: dbUserId,
+            updated_by: dbUserId,
             last_verified_at: new Date().toISOString(),
-            last_verified_by: currentUser.id,
+            last_verified_by: dbUserId,
           })
           .select()
           .single();
@@ -225,7 +228,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
           const insertPayload = newPhotos.map(p => ({
             tip_id: savedTipId,
             storage_path: p.storage_path,
-            uploaded_by: currentUser.id,
+            uploaded_by: dbUserId,
           }));
 
           const { error: photoDbError } = await supabase

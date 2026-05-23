@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { getDbUserId } from '../utils/userUtils';
 
 const ZONE_COLORS = [
   { value: '#6366F1', label: '인디고' },
@@ -45,6 +46,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
 
     setSaving(true);
     setError(null);
+    const dbUserId = getDbUserId(currentUser);
 
     try {
       if (zone) {
@@ -55,7 +57,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
             name: name.trim(),
             color,
             memo: memo.trim(),
-            updated_by: currentUser.id,
+            updated_by: dbUserId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', zone.id);
@@ -79,8 +81,8 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
             color,
             memo: memo.trim(),
             polygon: geoJSONPolygon,
-            created_by: currentUser.id,
-            updated_by: currentUser.id,
+            created_by: dbUserId,
+            updated_by: dbUserId,
           });
 
         if (error) throw error;

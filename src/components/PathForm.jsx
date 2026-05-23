@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Navigation } from 'lucide-react';
+import { getDbUserId } from '../utils/userUtils';
 
 export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave, onCancel }) {
   const [name, setName] = useState('');
@@ -32,6 +33,7 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
 
     setSaving(true);
     setError(null);
+    const dbUserId = getDbUserId(currentUser);
 
     try {
       if (path) {
@@ -41,7 +43,7 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
           .update({
             name: name.trim(),
             memo: memo.trim(),
-            updated_by: currentUser.id,
+            updated_by: dbUserId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', path.id);
@@ -55,8 +57,8 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
             name: name.trim(),
             memo: memo.trim(),
             zone_id: zoneId || null,
-            created_by: currentUser.id,
-            updated_by: currentUser.id,
+            created_by: dbUserId,
+            updated_by: dbUserId,
           })
           .select()
           .single();

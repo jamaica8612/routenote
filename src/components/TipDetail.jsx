@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Image } from 'lucide-react';
+import { getDbUserId } from '../utils/userUtils';
 
 const MARKER_TYPES = {
   vehicle_entrance: { emoji: '🚗', label: '차량 진입구' },
@@ -74,18 +75,19 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     setVerifying(true);
     try {
       const now = new Date().toISOString();
+      const dbUserId = getDbUserId(currentUser);
       const { error } = await supabase
         .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
         .update({
           last_verified_at: now,
-          last_verified_by: currentUser.id,
-          updated_by: currentUser.id,
+          last_verified_by: dbUserId,
+          updated_by: dbUserId,
         })
         .eq('id', tip.id);
 
       if (error) throw error;
       setVerifierName(currentUser.name);
-      onVerified(now, currentUser.id);
+      onVerified(now, dbUserId);
     } catch (err) {
       alert('확인 상태 갱신 실패: ' + err.message);
     } finally {
