@@ -361,6 +361,7 @@ export default function App() {
         setActivePathId={setActivePathId}
         drawCoords={drawCoords}
         setDrawCoords={setDrawCoords}
+        selectedZone={selectedZone} // [New Prop] Pass currently open zone detail
         onFinishDrawingZone={() => {
           setSelectedZone(null);
           setSheetTitle('새 배송구역 등록');

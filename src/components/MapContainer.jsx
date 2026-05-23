@@ -29,8 +29,9 @@ export default function MapContainer({
   setIsDrawingPath,
   activePathId,
   setActivePathId,
-  drawCoords, // Format: Double Array [ [ {lat,lng}, {lat,lng} ], [ ... ] ]
+  drawCoords, // Format: Double Array [ [ {lat,lng}, ... ], [ ... ] ]
   setDrawCoords,
+  selectedZone, // [New Prop] Accept currently open/focused zone
   onFinishDrawingZone,
   onFinishDrawingPath,
 }) {
@@ -39,10 +40,9 @@ export default function MapContainer({
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [markers, setMarkers] = useState([]);
   const [polygons, setPolygons] = useState([]);
-  const [zoneLabels, setZoneLabels] = useState([]); // Separate state for text labels
+  const [zoneLabels, setZoneLabels] = useState([]);
   const [pathLines, setPathLines] = useState([]);
   
-  // States for dynamic rendering of currently drawing shapes
   const [drawingPolylines, setDrawingPolylines] = useState([]);
   const [drawingMarkers, setDrawingMarkers] = useState([]);
 
@@ -107,13 +107,11 @@ export default function MapContainer({
       if (!isDrawingZone && !isDrawingPath) {
         onMapClick(lat, lng);
       } else {
-        // Drawing Mode: Add Point to coordinates double array
         setDrawCoords(prev => {
           const next = [...prev];
           if (next.length === 0) {
             next.push([]);
           }
-          // Push to the active polygon loop (last array)
           next[next.length - 1] = [...next[next.length - 1], { lat, lng }];
           return next;
         });
@@ -158,7 +156,7 @@ export default function MapContainer({
     }
   }, [selectedResult, mapInstance]);
 
-  // Render Saved Zones (Polygons) and Centroid Text Labels
+  // Render Saved Zones conditionally (Only when searched/focused)
   useEffect(() => {
     if (!mapInstance || !zones) return;
 
@@ -169,14 +167,22 @@ export default function MapContainer({
     const newPolygons = [];
     const newLabels = [];
 
-    zones.forEach(zone => {
+    // Filter zones: ONLY show the zone if it matches selectedResult (searched) OR selectedZone (currently viewed)
+    const activeZoneId = selectedResult?.type === 'zone' ? selectedResult.data.id : null;
+    const sheetZoneId = selectedZone?.id || null;
+
+    let zonesToShow = [];
+    if (activeZoneId || sheetZoneId) {
+      zonesToShow = zones.filter(zone => zone.id === activeZoneId || zone.id === sheetZoneId);
+    }
+
+    zonesToShow.forEach(zone => {
       if (zone.is_deleted || !zone.polygon) return;
 
       const geom = zone.polygon;
       
       // Draw Polygon / MultiPolygon
       if (geom.type === 'MultiPolygon') {
-        // MultiPolygon coordinates structure: [ [ [ [lng, lat], ... ] ], [ [ [lng, lat], ... ] ] ]
         geom.coordinates.forEach(coordsGroup => {
           const naverCoords = coordsGroup[0].map(
             c => new window.naver.maps.LatLng(c[1], c[0])
@@ -220,7 +226,7 @@ export default function MapContainer({
         newPolygons.push(polygon);
       }
 
-      // Draw Zone Text Label on Centroid
+      // Draw Zone Centroid Text Label
       const centroid = getPolygonCentroid(geom);
       if (centroid) {
         const labelContent = `
@@ -245,7 +251,7 @@ export default function MapContainer({
             content: labelContent,
             anchor: new window.naver.maps.Point(0, 0),
           },
-          clickable: false, // Don't block map clicks
+          clickable: false,
         });
 
         newLabels.push(labelMarker);
@@ -254,7 +260,7 @@ export default function MapContainer({
 
     setPolygons(newPolygons);
     setZoneLabels(newLabels);
-  }, [zones, mapInstance]);
+  }, [zones, mapInstance, selectedResult, selectedZone]); // Triggered on search/focus changes
 
   // Render Route Tips (Markers with age calculation)
   useEffect(() => {
@@ -417,7 +423,6 @@ export default function MapContainer({
   useEffect(() => {
     if (!mapInstance) return;
 
-    // Remove old drawing polylines and tags
     drawingPolylines.forEach(pl => pl.setMap(null));
     drawingMarkers.forEach(m => m.setMap(null));
 
@@ -432,13 +437,11 @@ export default function MapContainer({
     const newPolylines = [];
     const newMarkers = [];
 
-    // Loop over each separate polygon loop
     drawCoords.forEach((currentPoly, polyIdx) => {
       if (currentPoly.length === 0) return;
 
       const naverCoords = currentPoly.map(pt => new window.naver.maps.LatLng(pt.lat, pt.lng));
 
-      // Draw dashed visual polyline for currently drawn segment
       const polyline = new window.naver.maps.Polyline({
         map: mapInstance,
         path: naverCoords,
@@ -449,7 +452,6 @@ export default function MapContainer({
       });
       newPolylines.push(polyline);
 
-      // Draw numbered marker badge for each point
       currentPoly.forEach((pt, pointIdx) => {
         const tagContent = `
           <div style="
@@ -490,7 +492,6 @@ export default function MapContainer({
     setDrawCoords([]);
   };
 
-  // Add a separate disjoint polygon path for MultiPolygons
   const addNewPolygonLoop = () => {
     const lastLoop = drawCoords[drawCoords.length - 1];
     if (!lastLoop || lastLoop.length < 3) {
@@ -550,7 +551,6 @@ export default function MapContainer({
                   }
                   onFinishDrawingZone();
                 } else {
-                  // Path uses drawCoords[0]
                   const pathPoints = drawCoords[0] || [];
                   if (pathPoints.length < 2) {
                     alert('동선 포인트를 2개 이상 찍어주세요.');
@@ -573,7 +573,7 @@ export default function MapContainer({
             style={styles.actionFloatBtn}
             onClick={() => {
               setIsDrawingZone(true);
-              setDrawCoords([[]]); // Initialize with empty double array
+              setDrawCoords([[]]);
             }}
             title="새 구역 그리기"
           >
