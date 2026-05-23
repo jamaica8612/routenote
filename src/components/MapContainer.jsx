@@ -36,16 +36,48 @@ export default function MapContainer({
 }) {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [markers, setMarkers] = useState([]);
   const [polygons, setPolygons] = useState([]);
   const [pathLines, setPathLines] = useState([]);
   const [drawingPolyline, setDrawingPolyline] = useState(null);
   const [drawingMarkers, setDrawingMarkers] = useState([]);
 
-  // Initialize Naver Map
+  // Dynamically load Naver Maps JavaScript API at runtime
   useEffect(() => {
-    if (!window.naver || !window.naver.maps) {
-      console.error('Naver Maps script is not loaded yet.');
+    const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
+    if (!clientId) {
+      console.error('Naver Maps Client ID is missing in environment variables (.env).');
+      return;
+    }
+
+    if (window.naver && window.naver.maps) {
+      setScriptLoaded(true);
+      return;
+    }
+
+    // Check if script element already exists to avoid duplicate loads
+    const existingScript = document.getElementById('naver-maps-script');
+    if (existingScript) {
+      const handleScriptLoad = () => setScriptLoaded(true);
+      existingScript.addEventListener('load', handleScriptLoad);
+      return () => existingScript.removeEventListener('load', handleScriptLoad);
+    }
+
+    const script = document.createElement('script');
+    script.id = 'naver-maps-script';
+    script.type = 'text/javascript';
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}&submodules=geocoder`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setScriptLoaded(true);
+    script.onerror = () => console.error('Failed to load Naver Maps API script.');
+    document.head.appendChild(script);
+  }, []);
+
+  // Initialize Naver Map once script is loaded
+  useEffect(() => {
+    if (!scriptLoaded || !window.naver || !window.naver.maps) {
       return;
     }
 
@@ -68,19 +100,15 @@ export default function MapContainer({
 
     // Map Click / Long Press Handling
     window.naver.maps.Event.addListener(map, 'click', (e) => {
-      // In normal mode, single click can be used to add marker or clear selections
       if (!isDrawingZone && !isDrawingPath) {
-        // Trigger parent callback to open New Tip modal
         onMapClick(e.coord.lat(), e.coord.lng());
       } else {
-        // Drawing Mode: Add Point
         const lat = e.coord.lat();
         const lng = e.coord.lng();
         setDrawCoords(prev => [...prev, { lat, lng }]);
       }
     });
 
-    // Handle Map Longpress to create marker
     window.naver.maps.Event.addListener(map, 'longpress', (e) => {
       if (!isDrawingZone && !isDrawingPath) {
         onMapClick(e.coord.lat(), e.coord.lng());
@@ -90,7 +118,7 @@ export default function MapContainer({
     return () => {
       window.naver.maps.Event.clearInstanceListeners(map);
     };
-  }, [isDrawingZone, isDrawingPath]);
+  }, [scriptLoaded, isDrawingZone, isDrawingPath]);
 
   // Handle zooming/panning to search result
   useEffect(() => {
@@ -106,14 +134,11 @@ export default function MapContainer({
       const targetLatLng = new window.naver.maps.LatLng(lat, lng);
       mapInstance.setCenter(targetLatLng);
       mapInstance.setZoom(19);
-      // Trigger tip marker details
       onMarkerClick(selectedResult.data);
     } else if (selectedResult.type === 'zone') {
-      // Center on zone centroid
       const zone = selectedResult.data;
       if (zone.polygon && zone.polygon.coordinates) {
         const coords = zone.polygon.coordinates[0];
-        // simple average centroid
         let latSum = 0, lngSum = 0;
         coords.forEach(c => {
           lngSum += c[0];
@@ -131,7 +156,6 @@ export default function MapContainer({
   useEffect(() => {
     if (!mapInstance || !zones) return;
 
-    // Clear existing polygons
     polygons.forEach(p => p.setMap(null));
     const newPolygons = [];
 
@@ -153,7 +177,6 @@ export default function MapContainer({
         clickable: true,
       });
 
-      // Show zone detail on click
       window.naver.maps.Event.addListener(polygon, 'click', () => {
         onZoneClick(zone);
       });
@@ -168,15 +191,13 @@ export default function MapContainer({
   useEffect(() => {
     if (!mapInstance || !tips) return;
 
-    // Clear old markers
     markers.forEach(m => m.setMap(null));
     const newMarkers = [];
 
     tips.forEach(tip => {
       if (tip.is_deleted) return;
 
-      // Age calculation for styling
-      let statusClass = 'marker-active'; // Less than 90 days
+      let statusClass = 'marker-active';
       let opacity = 1.0;
       let borderStyle = '2px solid #FFFFFF';
       let background = '#6366F1';
@@ -190,15 +211,14 @@ export default function MapContainer({
         if (diffDays >= 90 && diffDays < 180) {
           statusClass = 'marker-warn';
           opacity = 0.65;
-          background = '#9CA3AF'; // Faded gray-blue
+          background = '#9CA3AF';
         } else if (diffDays >= 180) {
           statusClass = 'marker-old';
           opacity = 0.45;
-          background = '#4B5563'; // Faded dark gray
+          background = '#4B5563';
           borderStyle = '1.5px dashed #9CA3AF';
         }
       } else {
-        // No verification date = very old
         statusClass = 'marker-old';
         opacity = 0.45;
         background = '#4B5563';
@@ -207,7 +227,6 @@ export default function MapContainer({
 
       const markerTypeObj = MARKER_TYPES[tip.marker_type] || { emoji: '📦' };
 
-      // High-performance HTML Marker representation
       const markerContent = `
         <div class="custom-map-marker ${statusClass}" style="
           display: flex;
@@ -251,7 +270,6 @@ export default function MapContainer({
   useEffect(() => {
     if (!mapInstance) return;
 
-    // Clear old path drawings
     pathLines.forEach(pl => pl.setMap(null));
     const newPathLines = [];
 
@@ -260,11 +278,10 @@ export default function MapContainer({
       return;
     }
 
-    // Fetch path details & points for activePathId
     const drawSavedPath = async () => {
       try {
         const { data: points, error } = await supabase
-          .from('rn_route_path_points') // [Prefix Update] route_path_points -> rn_route_path_points
+          .from('rn_route_path_points')
           .select('*')
           .eq('path_id', activePathId)
           .order('order_index', { ascending: true });
@@ -274,11 +291,10 @@ export default function MapContainer({
 
         const polylineCoords = points.map(pt => new window.naver.maps.LatLng(pt.lat, pt.lng));
 
-        // Draw Polyline
         const pathLine = new window.naver.maps.Polyline({
           map: mapInstance,
           path: polylineCoords,
-          strokeColor: '#EF4444', // Red path line
+          strokeColor: '#EF4444',
           strokeOpacity: 0.8,
           strokeWeight: 4,
           strokeStyle: 'solid',
@@ -287,7 +303,6 @@ export default function MapContainer({
         });
         newPathLines.push(pathLine);
 
-        // Draw numbered markers for points
         points.forEach((pt, index) => {
           const pointContent = `
             <div style="
@@ -333,7 +348,6 @@ export default function MapContainer({
   useEffect(() => {
     if (!mapInstance) return;
 
-    // Remove old drawings
     if (drawingPolyline) drawingPolyline.setMap(null);
     drawingMarkers.forEach(m => m.setMap(null));
 
@@ -345,7 +359,6 @@ export default function MapContainer({
 
     const naverCoords = drawCoords.map(pt => new window.naver.maps.LatLng(pt.lat, pt.lng));
 
-    // Connect vertices
     const polyline = new window.naver.maps.Polyline({
       map: mapInstance,
       path: naverCoords,
@@ -356,7 +369,6 @@ export default function MapContainer({
     });
     setDrawingPolyline(polyline);
 
-    // Draw visual point tags
     const newDrawingMarkers = drawCoords.map((pt, idx) => {
       const tagContent = `
         <div style="
@@ -387,7 +399,6 @@ export default function MapContainer({
     setDrawingMarkers(newDrawingMarkers);
   }, [drawCoords, isDrawingZone, isDrawingPath, mapInstance]);
 
-  // Exit drawing helpers
   const cancelDrawing = () => {
     setIsDrawingZone(false);
     setIsDrawingPath(false);
@@ -396,10 +407,14 @@ export default function MapContainer({
 
   return (
     <div style={styles.container}>
-      {/* MAP MOUNT ELEMENT */}
+      {/* Loading state before script mounts */}
+      {!scriptLoaded && (
+        <div style={styles.mapLoading}>
+          <span>네이버 지도 초기화 중...</span>
+        </div>
+      )}
       <div ref={mapRef} style={styles.map}></div>
 
-      {/* DRAWING CONTROL PANEL */}
       {(isDrawingZone || isDrawingPath) && (
         <div className="glass" style={styles.drawingPanel}>
           <div style={styles.drawingTitle}>
@@ -439,7 +454,6 @@ export default function MapContainer({
         </div>
       )}
 
-      {/* ADMIN DRAW TRIGGER BUTTONS */}
       {currentUser && currentUser.role === 'admin' && !isDrawingZone && !isDrawingPath && (
         <div style={styles.adminTriggers}>
           <button
@@ -457,7 +471,6 @@ export default function MapContainer({
         </div>
       )}
 
-      {/* ACTIVE PATH INFO & CLEAR TRIGGER */}
       {activePathId && (
         <div className="glass" style={styles.activePathPanel}>
           <div style={styles.activePathText}>
@@ -485,6 +498,20 @@ const styles = {
   map: {
     width: '100%',
     height: '100%',
+  },
+  mapLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 999,
+    backgroundColor: '#0B0F19',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--text-secondary)',
+    fontSize: '14px',
   },
   drawingPanel: {
     position: 'absolute',

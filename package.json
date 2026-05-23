@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://<your-username>.github.io/routenote",
+  "homepage": "https://jamaica8612.github.io/routenote",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
