@@ -378,6 +378,10 @@ export default function App() {
     return <AuthScreen onDemoLogin={handleDemoLogin} />;
   }
 
+  // Filter tips to display: only show tips of the active zone when bottom sheet is open
+  const activeZoneId = sheetOpen ? (selectedZone?.id || selectedTip?.zone_id) : null;
+  const filteredTips = activeZoneId ? tips.filter(t => t.zone_id === activeZoneId) : [];
+
   return (
     <div className="app-container">
       {/* 1. UPPER FIXED SEARCH BOX */}
@@ -392,7 +396,7 @@ export default function App() {
       {/* 2. BACKGROUND MAP DISPLAY */}
       <MapContainer
         zones={zones}
-        tips={tips}
+        tips={filteredTips}
         paths={[]} // not needed dynamically
         selectedResult={selectedResult}
         currentUser={currentUser}
