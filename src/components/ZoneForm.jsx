@@ -224,7 +224,6 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       const inferredRegion = `${data.cityName || ''} ${data.districtName || ''}`.trim();
       if (!regionName && inferredRegion) setRegionName(inferredRegion);
       if (!name && inferredRegion) setName(inferredRegion);
-      if (!memo) setMemo(`Postcode zones: ${data.postcode}`);
     } catch (err) {
       updateRow(groupIndex, rowIndex, {
         data: null,
