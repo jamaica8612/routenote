@@ -2,17 +2,45 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText, Camera, Image, Trash } from 'lucide-react';
 
-export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId }) {
+export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId, onUpdate }) {
   const [paths, setPaths] = useState([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isImageExpanded, setIsImageExpanded] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState(zone.image_url || '');
+  const [memoText, setMemoText] = useState(zone.memo || '');
+  const [savingMemo, setSavingMemo] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     setCurrentImageUrl(zone.image_url || '');
+    setMemoText(zone.memo || '');
   }, [zone]);
+
+  const handleSaveMemo = async () => {
+    setSavingMemo(true);
+    try {
+      const { error: dbError } = await supabase
+        .from('rn_route_zones')
+        .update({
+          memo: memoText.trim(),
+          updated_by: currentUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', zone.id);
+
+      if (dbError) throw dbError;
+
+      zone.memo = memoText.trim();
+      alert('구역 배송팁 메모가 저장되었습니다.');
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      console.error('Error saving zone memo:', err);
+      alert('메모 저장 실패: ' + err.message);
+    } finally {
+      setSavingMemo(false);
+    }
+  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -211,11 +239,36 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         </div>
       )}
 
-      {/* Zone Memo */}
-      {zone.memo && (
+      {/* Zone Memo (For Guest Viewer - Read Only) */}
+      {currentUser?.role === 'viewer' && zone.memo && (
         <div style={styles.memoBox}>
           <FileText size={16} color="var(--text-secondary)" style={{ marginTop: '2px', flexShrink: 0 }} />
           <p style={styles.memoText}>{zone.memo}</p>
+        </div>
+      )}
+
+      {/* Zone Memo (For Driver/Admin - Editable) */}
+      {currentUser && currentUser.role !== 'viewer' && (
+        <div style={styles.memoSection}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>구역 전체 배송팁 메모</h3>
+          </div>
+          <textarea
+            className="input-field"
+            style={styles.memoTextarea}
+            placeholder="구역 전체의 특이사항(예: 공동현관 비밀번호, 주차 팁 등)을 입력해 주세요."
+            value={memoText}
+            onChange={(e) => setMemoText(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={styles.saveMemoBtn}
+            onClick={handleSaveMemo}
+            disabled={savingMemo || memoText.trim() === (zone.memo || '')}
+          >
+            {savingMemo ? '저장 중...' : '메모 저장'}
+          </button>
         </div>
       )}
 
@@ -600,5 +653,29 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'background-color 0.2s',
+  },
+  memoSection: {
+    marginBottom: '20px',
+  },
+  memoTextarea: {
+    width: '100%',
+    minHeight: '80px',
+    padding: '12px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--bg-input)',
+    border: '1px solid var(--bg-card-border)',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    resize: 'vertical',
+    fontFamily: 'inherit',
+    marginBottom: '8px',
+  },
+  saveMemoBtn: {
+    width: '100%',
+    padding: '10px 16px',
+    minHeight: '38px',
+    fontSize: '13px',
+    borderRadius: '10px',
   },
 };

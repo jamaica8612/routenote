@@ -299,6 +299,7 @@ export default function App() {
               }
             }}
             activePathId={activePathId}
+            onUpdate={fetchData}
           />
         );
       case 'zone-form':
