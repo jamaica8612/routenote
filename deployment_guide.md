@@ -43,10 +43,12 @@
    supabase secrets set NAVER_MAP_CLIENT_SECRET="발급받은_네이버_클라이언트_시크릿"
    ```
 4. **Edge Function 배포**:
+   주소 검색 및 우편번호 구역 경계 조회 기능에 필요한 서버리스 함수들을 배포합니다.
    ```bash
    supabase functions deploy rn-geocode
+   supabase functions deploy rn-postcode-zone
    ```
-   배포 후 주소 검색 시 Supabase Edge Function을 통해 보안 상태로 네이버 API를 경유하여 동작합니다.
+   배포 후 주소 검색 및 우편번호 기반 구역 생성 기능이 Supabase Edge Functions를 거쳐 정상적으로 경유 동작합니다.
 
 ---
 
