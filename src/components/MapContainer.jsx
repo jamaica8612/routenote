@@ -80,7 +80,7 @@ export default function MapContainer({
     const script = document.createElement('script');
     script.id = 'naver-maps-script';
     script.type = 'text/javascript';
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}&submodules=geocoder`;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}&submodules=geocoder,panorama`;
     script.async = true;
     script.defer = true;
     script.onload = () => setScriptLoaded(true);

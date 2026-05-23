@@ -23,10 +23,51 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [roadviewCoords, setRoadviewCoords] = useState(null);
+
+  useEffect(() => {
+    if (!tip) return;
+    setRoadviewCoords(null); // Reset when tip changes
+
+    let checkInterval;
+    const resolvePano = () => {
+      if (window.naver && window.naver.maps && window.naver.maps.Panorama) {
+        clearInterval(checkInterval);
+        try {
+          const dummyDiv = document.createElement('div');
+          const pano = new window.naver.maps.Panorama(dummyDiv, {
+            position: new window.naver.maps.LatLng(tip.lat, tip.lng),
+          });
+
+          const listener = window.naver.maps.Event.addListener(pano, 'pano_changed', () => {
+            const pos = pano.getPosition();
+            if (pos) {
+              setRoadviewCoords({ lat: pos.lat(), lng: pos.lng() });
+            }
+            window.naver.maps.Event.removeListener(listener);
+          });
+        } catch (err) {
+          console.warn("Failed to resolve nearest roadview:", err);
+        }
+      }
+    };
+
+    if (window.naver && window.naver.maps && window.naver.maps.Panorama) {
+      resolvePano();
+    } else {
+      checkInterval = setInterval(resolvePano, 500);
+    }
+
+    return () => {
+      if (checkInterval) clearInterval(checkInterval);
+    };
+  }, [tip]);
 
   const handleOpenRoadview = () => {
-    // Correct Naver Map Panorama URL formatting with centering context 'c' to prevent black screen load errors.
-    const roadviewUrl = `https://map.naver.com/v5/?c=${tip.lng},${tip.lat},17,0,0,0,dh&p=${tip.lng},${tip.lat},10,0,normal,rv`;
+    // Snap to resolved nearest roadview coordinates, fallback to tip coordinates if unresolved
+    const lat = roadviewCoords?.lat || tip.lat;
+    const lng = roadviewCoords?.lng || tip.lng;
+    const roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
     window.open(roadviewUrl, '_blank');
   };
 
