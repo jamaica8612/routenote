@@ -19,6 +19,57 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Sorted zones coordinates & sub-label text states
+  const [sortedZonesData, setSortedZonesData] = useState([]);
+
+  // Extract loops and match with subLabels, sorting by centroid longitude (left-to-right)
+  const getSortedLoopsAndLabels = () => {
+    let loops = [];
+    let initialLabels = [];
+
+    if (zone) {
+      // Modifying existing zone
+      const geom = zone.polygon;
+      if (geom.type === 'MultiPolygon') {
+        loops = geom.coordinates.map(coordsGroup => {
+          return coordsGroup[0].map(c => ({ lat: c[1], lng: c[0] }));
+        });
+      } else if (geom.type === 'Polygon') {
+        loops = [geom.coordinates[0].map(c => ({ lat: c[1], lng: c[0] }))];
+      }
+      initialLabels = geom.subLabels || [];
+    } else if (polygonCoords) {
+      // Creating new zone
+      loops = polygonCoords.filter(loop => loop.length >= 3);
+    }
+
+    // Map each loop with its centroid longitude
+    const loopsWithCentroid = loops.map((loop, idx) => {
+      let lats = loop.map(p => p.lat);
+      let lngs = loop.map(p => p.lng);
+      let centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+      let centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+
+      let label = '';
+      if (zone) {
+        label = initialLabels[idx] || '';
+      }
+      
+      return {
+        loop,
+        centroidLng,
+        centroidLat,
+        originalIndex: idx,
+        label: label
+      };
+    });
+
+    // Sort by longitude (min to max, meaning left to right)
+    loopsWithCentroid.sort((a, b) => a.centroidLng - b.centroidLng);
+
+    return loopsWithCentroid;
+  };
 
   useEffect(() => {
     if (zone) {
@@ -30,7 +81,18 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       setColor('#6366F1');
       setMemo('');
     }
-  }, [zone]);
+    
+    const sorted = getSortedLoopsAndLabels();
+    setSortedZonesData(sorted);
+  }, [zone, polygonCoords]);
+
+  const handleSubLabelChange = (index, value) => {
+    setSortedZonesData(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], label: value };
+      return next;
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,9 +101,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       return;
     }
 
-    const validLoops = polygonCoords ? polygonCoords.filter(loop => loop.length >= 3) : [];
-
-    if (!zone && validLoops.length === 0) {
+    if (!zone && sortedZonesData.length === 0) {
       alert('지도상에 최소 1개 이상의 올바른 영역(꼭짓점 3개 이상)을 그려주세요.');
       return;
     }
@@ -51,14 +111,34 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
     const dbUserId = getDbUserId(currentUser);
 
     try {
+      // Re-map sorted loops to GeoJSON structures
+      const sortedLoops = sortedZonesData.map(d => d.loop);
+      const subLabelsToSave = sortedZonesData.map(d => d.label.trim() || name.trim()); // Fallback to main zone name if empty
+
+      const multiPolygonCoords = sortedLoops.map(loop => {
+        const ring = loop.map(pt => [pt.lng, pt.lat]);
+        // Close the polygon ring loop by repeating the first coordinate
+        if (ring.length > 0 && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
+          ring.push([loop[0].lng, loop[0].lat]);
+        }
+        return [ring];
+      });
+
+      const geoJSONPolygon = {
+        type: 'MultiPolygon',
+        coordinates: multiPolygonCoords,
+        subLabels: subLabelsToSave
+      };
+
       if (zone) {
-        // UPDATE Existing Zone
+        // UPDATE Existing Zone (including its subLabels inside polygon JSONB)
         const { error } = await supabase
           .from('rn_route_zones')
           .update({
             name: name.trim(),
             color,
             memo: memo.trim(),
+            polygon: geoJSONPolygon,
             updated_by: dbUserId,
             updated_at: new Date().toISOString(),
           })
@@ -67,19 +147,6 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
         if (error) throw error;
       } else {
         // INSERT New Zone as MultiPolygon GeoJSON
-        // Coordinates structure: [ [ [ [lng, lat], ... (closed) ] ], [ [ [lng, lat], ... (closed) ] ] ]
-        const multiPolygonCoords = validLoops.map(loop => {
-          const ring = loop.map(pt => [pt.lng, pt.lat]);
-          // Close the polygon ring loop by repeating the first coordinate
-          ring.push([loop[0].lng, loop[0].lat]);
-          return [ring];
-        });
-
-        const geoJSONPolygon = {
-          type: 'MultiPolygon',
-          coordinates: multiPolygonCoords
-        };
-
         const { error } = await supabase
           .from('rn_route_zones')
           .insert({
@@ -104,8 +171,8 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
 
   const totalPoints = polygonCoords 
     ? polygonCoords.reduce((sum, loop) => sum + loop.length, 0) 
-    : 0;
-  const loopCount = polygonCoords ? polygonCoords.filter(l => l.length > 0).length : 0;
+    : (zone && zone.polygon ? (zone.polygon.coordinates || []).reduce((sum, group) => sum + (group[0] || []).length, 0) : 0);
+  const loopCount = sortedZonesData.length;
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
@@ -117,12 +184,43 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
           id="zone-name"
           type="text"
           className="input-field"
-          placeholder="예) 319, 장전래미안, 313BC"
+          placeholder="예) 319ABCD, 장전래미안, 313BC"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
       </div>
+
+      {sortedZonesData.length > 0 && (
+        <div className="input-group" style={{ marginTop: '4px', marginBottom: '16px' }}>
+          <label className="input-label">구역 내 각 영역별 표시 텍스트</label>
+          <div style={styles.subLabelsList}>
+            {sortedZonesData.map((d, index) => {
+              let directionHint = '';
+              if (sortedZonesData.length > 1) {
+                if (index === 0) directionHint = ' (가장 왼쪽)';
+                else if (index === sortedZonesData.length - 1) directionHint = ' (가장 오른쪽)';
+                else directionHint = ` (중간 영역 ${index + 1})`;
+              }
+              return (
+                <div key={index} style={styles.subLabelItem}>
+                  <span style={styles.subLabelHint}>
+                    영역 {index + 1}{directionHint}
+                  </span>
+                  <input
+                    type="text"
+                    className="input-field"
+                    style={{ marginTop: '4px' }}
+                    placeholder={`예) 319C02 등 표시 이름 입력 (미기입시 "${name || '구역명'}")`}
+                    value={d.label}
+                    onChange={(e) => handleSubLabelChange(index, e.target.value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="input-group">
         <label className="input-label">구역 색상</label>
@@ -158,11 +256,9 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
         />
       </div>
 
-      {!zone && (
-        <div style={styles.infoBox}>
-          <span>분리된 영역 수: <strong>{loopCount}개</strong> (총 꼭짓점 수: {totalPoints}개)</span>
-        </div>
-      )}
+      <div style={styles.infoBox}>
+        <span>분리된 영역 수: <strong>{loopCount}개</strong> (총 꼭짓점 수: {totalPoints}개)</span>
+      </div>
 
       <div style={styles.actions}>
         <button
@@ -230,5 +326,24 @@ const styles = {
     display: 'flex',
     gap: '12px',
     marginTop: '24px',
+  },
+  subLabelsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    backgroundColor: 'var(--bg-input)',
+    padding: '12px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--bg-card-border)',
+    marginTop: '6px',
+  },
+  subLabelItem: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  subLabelHint: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: 'var(--text-secondary)',
   },
 };

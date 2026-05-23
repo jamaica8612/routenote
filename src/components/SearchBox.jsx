@@ -35,14 +35,20 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
       const searchResults = [];
       const lowerVal = val.toLowerCase().trim();
 
-      // 1. Search Local Zones (Priority 1)
       const matchedZones = zones
-        .filter(z => !z.is_deleted && z.name.toLowerCase().includes(lowerVal))
+        .filter(z => {
+          if (z.is_deleted) return false;
+          const matchesName = z.name.toLowerCase().includes(lowerVal);
+          const matchesSubLabel = z.polygon && z.polygon.subLabels && z.polygon.subLabels.some(
+            sl => sl.toLowerCase().includes(lowerVal)
+          );
+          return matchesName || matchesSubLabel;
+        })
         .map(z => ({
           type: 'zone',
           id: z.id,
           title: z.name,
-          subtitle: z.memo || '배송 구역',
+          subtitle: z.polygon && z.polygon.subLabels ? `${z.polygon.subLabels.join(', ')} | ${z.memo || ''}` : (z.memo || '배송 구역'),
           icon: <Map size={16} color="#6366F1" />,
           data: z,
         }));

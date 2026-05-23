@@ -233,26 +233,25 @@ export default function MapContainer({
         newPolygons.push(polygon);
       }
 
-      // Draw Zone Centroid Text Label
-      const centroid = getPolygonCentroid(geom);
-      if (centroid) {
+      // Helper function to render a clean, standard label at a specific centroid
+      const renderLabel = (lat, lng, text) => {
         const labelContent = `
           <div style="
-            color: ${zone.color || '#6366F1'};
-            font-weight: 800;
-            font-size: 15px;
+            color: #334155; /* Slate 700 (clean, professional dark slate) */
+            font-weight: 600;
+            font-size: 13px;
             white-space: nowrap;
-            text-shadow: -1.5px 0 #000, 0 1.5px #000, 1.5px 0 #000, 0 -1.5px #000;
+            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; /* Thin white blur glow for visibility */
             user-select: none;
             pointer-events: none;
             transform: translate(-50%, -50%);
           ">
-            ${zone.name}
+            ${text}
           </div>
         `;
 
         const labelMarker = new window.naver.maps.Marker({
-          position: new window.naver.maps.LatLng(centroid.lat, centroid.lng),
+          position: new window.naver.maps.LatLng(lat, lng),
           map: mapInstance,
           icon: {
             content: labelContent,
@@ -262,6 +261,27 @@ export default function MapContainer({
         });
 
         newLabels.push(labelMarker);
+      };
+
+      // Draw Zone Centroid Text Label for each polygon element
+      if (geom.type === 'MultiPolygon') {
+        geom.coordinates.forEach((coordsGroup, polyIdx) => {
+          const singleGeom = {
+            type: 'Polygon',
+            coordinates: coordsGroup
+          };
+          const centroid = getPolygonCentroid(singleGeom);
+          if (centroid) {
+            const labelText = (geom.subLabels && geom.subLabels[polyIdx]) || zone.name;
+            renderLabel(centroid.lat, centroid.lng, labelText);
+          }
+        });
+      } else if (geom.type === 'Polygon') {
+        const centroid = getPolygonCentroid(geom);
+        if (centroid) {
+          const labelText = (geom.subLabels && geom.subLabels[0]) || zone.name;
+          renderLabel(centroid.lat, centroid.lng, labelText);
+        }
       }
     });
 
