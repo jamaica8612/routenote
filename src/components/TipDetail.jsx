@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Image } from 'lucide-react';
+import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Image, Map } from 'lucide-react';
 import { getDbUserId } from '../utils/userUtils';
 
 const MARKER_TYPES = {
@@ -23,6 +23,12 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [verifying, setVerifying] = useState(false);
+
+  const handleOpenRoadview = () => {
+    // Naver Map Panorama URL format: https://map.naver.com/v5/?p={lng},{lat},10,0,normal,rv
+    const roadviewUrl = `https://map.naver.com/v5/?p=${tip.lng},${tip.lat},10,0,normal,rv`;
+    window.open(roadviewUrl, '_blank');
+  };
 
   useEffect(() => {
     if (!tip) return;
@@ -272,39 +278,52 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
       </div>
 
       {/* Primary Actions (Verification & Editing) */}
-      <div style={styles.actions}>
+      <div style={styles.actionsContainer}>
+        {/* Row 1: Verification Button (Full width) */}
         <button
           className="btn btn-secondary"
-          style={{ flex: 1 }}
+          style={styles.verifyBtn}
           onClick={handleVerify}
           disabled={verifying}
         >
           <Check size={18} color="var(--success)" />
-          <span>{verifying ? '확인 중...' : '이 팁 아직 맞음'}</span>
+          <span style={{ fontWeight: '600' }}>{verifying ? '확인 중...' : '이 팁 아직 맞음 (인증)'}</span>
         </button>
 
-        <button className="btn btn-secondary" style={{ padding: '14px' }} onClick={handleFetchHistory} title="변경 이력">
-          이력 보기
-        </button>
-
-        <button className="btn btn-primary" style={{ padding: '14px' }} onClick={() => onEdit(tip)}>
-          <Edit3 size={18} />
-          <span>수정</span>
-        </button>
-
-        {currentUser && currentUser.role === 'admin' && (
-          <button
-            className="btn btn-danger"
-            style={{ padding: '14px' }}
-            onClick={() => {
-              if (confirm('이 배송팁을 정말 삭제하시겠습니까? (숨김 처리됨)')) {
-                onDelete(tip.id);
-              }
-            }}
-          >
-            <Trash2 size={18} />
+        {/* Row 2: View Actions Group (Roadview & History) */}
+        <div style={styles.subActions}>
+          <button className="btn btn-secondary" style={styles.subBtn} onClick={handleOpenRoadview} title="네이버 로드뷰 보기">
+            <Map size={16} color="var(--primary)" />
+            <span>로드뷰 보기</span>
           </button>
-        )}
+
+          <button className="btn btn-secondary" style={styles.subBtn} onClick={handleFetchHistory} title="변경 이력">
+            <span>이력 보기</span>
+          </button>
+        </div>
+
+        {/* Row 3: Modify Actions Group (Edit & Delete) */}
+        <div style={styles.subActions}>
+          <button className="btn btn-primary" style={styles.subBtn} onClick={() => onEdit(tip)}>
+            <Edit3 size={16} />
+            <span>수정</span>
+          </button>
+
+          {currentUser && currentUser.role === 'admin' && (
+            <button
+              className="btn btn-danger"
+              style={styles.deleteBtn}
+              onClick={() => {
+                if (confirm('이 배송팁을 정말 삭제하시겠습니까? (숨김 처리됨)')) {
+                  onDelete(tip.id);
+                }
+              }}
+            >
+              <Trash2 size={16} />
+              <span>삭제</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* HISTORY MODAL (SLIDE OVERLAY) */}
@@ -455,10 +474,49 @@ const styles = {
     fontSize: '12px',
     color: 'var(--text-secondary)',
   },
-  actions: {
+  actionsContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+    marginTop: '8px',
+  },
+  verifyBtn: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px',
+    borderRadius: 'var(--radius-md)',
+  },
+  subActions: {
     display: 'flex',
     gap: '8px',
     width: '100%',
+  },
+  subBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 8px',
+    fontSize: '13px',
+    whiteSpace: 'nowrap',
+  },
+  deleteBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 8px',
+    fontSize: '13px',
+    backgroundColor: 'var(--danger)',
+    color: '#FFFFFF',
+    border: 'none',
+    whiteSpace: 'nowrap',
   },
   // History Modal Styles
   historyOverlay: {

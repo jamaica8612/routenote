@@ -179,6 +179,32 @@ export default function App() {
     );
   };
 
+  // Move Map to Current GPS Location
+  const handleMoveToCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('이 브라우저는 GPS 위치 조회를 지원하지 않습니다.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setSelectedResult({
+          type: 'address',
+          data: {
+            lat: latitude,
+            lng: longitude,
+            name: '현재 위치'
+          }
+        });
+      },
+      (error) => {
+        alert('현재 위치를 가져올 수 없습니다: ' + error.message);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
   // Render content dynamically inside sliding BottomSheet
   const renderSheetContent = () => {
     switch (sheetContent) {
@@ -375,29 +401,39 @@ export default function App() {
         }}
       />
 
-      {/* 3. LOGOUT & CURRENT LOCATION TRIGGER FLOATS */}
+      {/* 3. UPPER UTILITY BUTTONS (LOGOUT & MAP ACTIONS) */}
       {!isDrawingZone && !isDrawingPath && (
-        <div style={styles.floatingUI}>
-          {/* Logout Button */}
+        <>
+          {/* Logout Button (Top-Right) */}
           <button
-            className="btn btn-secondary btn-icon"
+            className="btn btn-secondary btn-icon glass"
             onClick={handleLogout}
             title="로그아웃"
-            style={styles.circleFloatBtn}
+            style={styles.headerLogoutBtn}
           >
             <LogOut size={18} />
           </button>
           
-          {/* GPS Current Location Tip Register */}
+          {/* GPS Location Centering Button (Below Logout) */}
+          <button
+            className="btn btn-secondary btn-icon glass"
+            onClick={handleMoveToCurrentLocation}
+            title="현재 위치로 지도 이동"
+            style={styles.headerLocationBtn}
+          >
+            <Compass size={20} color="var(--primary)" />
+          </button>
+
+          {/* GPS Current Location Tip Register (Below Location button) */}
           <button
             className="btn btn-primary btn-icon"
             onClick={handleCurrentLocationRegister}
-            title="현재 위치 기준 팁 등록"
-            style={{ ...styles.circleFloatBtn, backgroundColor: 'var(--success)', color: '#FFFFFF' }}
+            title="현재 위치에 배송팁 등록"
+            style={styles.headerGpsBtn}
           >
-            <MapPin size={20} />
+            <Plus size={22} />
           </button>
-        </div>
+        </>
       )}
 
       {/* 4. MODAL SLIDE BOTTOM SHEET */}
@@ -422,19 +458,51 @@ const styles = {
     height: '100%',
     backgroundColor: '#0B0F19',
   },
-  floatingUI: {
+  headerLogoutBtn: {
     position: 'absolute',
-    bottom: '24px',
-    left: '16px',
-    zIndex: 850,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  circleFloatBtn: {
-    borderRadius: '50%',
-    width: '52px',
-    height: '52px',
+    top: '16px',
+    right: '16px',
+    width: '54px',
+    height: '54px',
+    borderRadius: 'var(--radius-md)',
     boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--bg-card-border)',
+    cursor: 'pointer',
+  },
+  headerLocationBtn: {
+    position: 'absolute',
+    top: '82px',
+    right: '16px',
+    width: '54px',
+    height: '54px',
+    borderRadius: '50%',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--bg-card-border)',
+    cursor: 'pointer',
+  },
+  headerGpsBtn: {
+    position: 'absolute',
+    top: '148px',
+    right: '16px',
+    width: '54px',
+    height: '54px',
+    borderRadius: '50%',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'var(--success)',
+    color: '#FFFFFF',
+    border: 'none',
+    cursor: 'pointer',
   },
 };

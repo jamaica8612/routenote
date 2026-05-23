@@ -171,7 +171,7 @@ const styles = {
     position: 'absolute',
     top: '16px',
     left: '16px',
-    right: '16px',
+    right: '82px', // Make room for logout button on the right (16px edge + 54px button + 12px gap)
     zIndex: 900,
     display: 'flex',
     flexDirection: 'column',
