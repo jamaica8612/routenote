@@ -25,8 +25,8 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const [verifying, setVerifying] = useState(false);
 
   const handleOpenRoadview = () => {
-    // Naver Map Panorama URL format: https://map.naver.com/v5/?p={lng},{lat},10,0,normal,rv
-    const roadviewUrl = `https://map.naver.com/v5/?p=${tip.lng},${tip.lat},10,0,normal,rv`;
+    // Correct Naver Map Panorama URL formatting with centering context 'c' to prevent black screen load errors.
+    const roadviewUrl = `https://map.naver.com/v5/?c=${tip.lng},${tip.lat},17,0,0,0,dh&p=${tip.lng},${tip.lat},10,0,normal,rv`;
     window.open(roadviewUrl, '_blank');
   };
 
@@ -279,22 +279,27 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
       {/* Primary Actions (Verification & Editing) */}
       <div style={styles.actionsContainer}>
-        {/* Row 1: Verification Button (Full width) */}
+        {/* Row 1: Roadview Button (Full width, placed on top) */}
         <button
-          className="btn btn-secondary"
-          style={styles.verifyBtn}
-          onClick={handleVerify}
-          disabled={verifying}
+          className="btn btn-primary"
+          style={styles.roadviewBtn}
+          onClick={handleOpenRoadview}
+          title="네이버 로드뷰 보기"
         >
-          <Check size={18} color="var(--success)" />
-          <span style={{ fontWeight: '600' }}>{verifying ? '확인 중...' : '이 팁 아직 맞음 (인증)'}</span>
+          <Map size={18} />
+          <span style={{ fontWeight: '600' }}>로드뷰 보기</span>
         </button>
 
-        {/* Row 2: View Actions Group (Roadview & History) */}
+        {/* Row 2: Verification & History */}
         <div style={styles.subActions}>
-          <button className="btn btn-secondary" style={styles.subBtn} onClick={handleOpenRoadview} title="네이버 로드뷰 보기">
-            <Map size={16} color="var(--primary)" />
-            <span>로드뷰 보기</span>
+          <button
+            className="btn btn-secondary"
+            style={styles.subBtn}
+            onClick={handleVerify}
+            disabled={verifying}
+          >
+            <Check size={16} color="var(--success)" />
+            <span>{verifying ? '확인 중...' : '이 팁 아직 맞음'}</span>
           </button>
 
           <button className="btn btn-secondary" style={styles.subBtn} onClick={handleFetchHistory} title="변경 이력">
@@ -304,8 +309,8 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
         {/* Row 3: Modify Actions Group (Edit & Delete) */}
         <div style={styles.subActions}>
-          <button className="btn btn-primary" style={styles.subBtn} onClick={() => onEdit(tip)}>
-            <Edit3 size={16} />
+          <button className="btn btn-secondary" style={styles.subBtn} onClick={() => onEdit(tip)}>
+            <Edit3 size={16} color="var(--primary)" />
             <span>수정</span>
           </button>
 
@@ -481,7 +486,7 @@ const styles = {
     width: '100%',
     marginTop: '8px',
   },
-  verifyBtn: {
+  roadviewBtn: {
     width: '100%',
     display: 'flex',
     alignItems: 'center',
@@ -489,6 +494,10 @@ const styles = {
     gap: '8px',
     padding: '14px',
     borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--primary)',
+    color: '#FFFFFF',
+    border: 'none',
+    cursor: 'pointer',
   },
   subActions: {
     display: 'flex',
