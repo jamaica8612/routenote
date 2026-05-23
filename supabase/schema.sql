@@ -211,3 +211,42 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_route_tip_updated_rn
     AFTER INSERT OR UPDATE ON public.rn_route_tips
     FOR EACH ROW EXECUTE FUNCTION public.rn_log_route_tip_history();
+
+
+-- 8. Storage Bucket and RLS Policies for 'tip-photos'
+-- Create the bucket if it doesn't exist
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('tip-photos', 'tip-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS policies for storage objects in 'tip-photos' bucket
+CREATE POLICY "rn_storage_select_tip_photos" ON storage.objects
+    FOR SELECT USING (bucket_id = 'tip-photos');
+
+CREATE POLICY "rn_storage_insert_tip_photos" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'tip-photos' AND auth.role() = 'authenticated');
+
+CREATE POLICY "rn_storage_update_tip_photos" ON storage.objects
+    FOR UPDATE USING (bucket_id = 'tip-photos' AND auth.role() = 'authenticated');
+
+CREATE POLICY "rn_storage_delete_tip_photos" ON storage.objects
+    FOR DELETE USING (bucket_id = 'tip-photos' AND auth.role() = 'authenticated');
+
+
+-- 9. Route Zone Photos Table
+CREATE TABLE IF NOT EXISTS public.rn_route_zone_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    zone_id UUID REFERENCES public.rn_route_zones(id) ON DELETE CASCADE,
+    storage_path TEXT NOT NULL,
+    uploaded_by UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN DEFAULT false
+);
+
+ALTER TABLE public.rn_route_zone_photos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_zone_photos_for_all" ON public.rn_route_zone_photos
+    FOR SELECT USING (true);
+
+CREATE POLICY "rn_write_zone_photos_for_auth" ON public.rn_route_zone_photos
+    FOR ALL USING (auth.role() = 'authenticated');

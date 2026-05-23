@@ -6,8 +6,9 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   const [paths, setPaths] = useState([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [isImageExpanded, setIsImageExpanded] = useState(false);
+  const [expandedPhotoUrl, setExpandedPhotoUrl] = useState(null);
   const [currentImageUrl, setCurrentImageUrl] = useState(zone.image_url || '');
+  const [zonePhotos, setZonePhotos] = useState([]);
   const [memoText, setMemoText] = useState(zone.memo || '');
   const [savingMemo, setSavingMemo] = useState(false);
   const [isMemoExpanded, setIsMemoExpanded] = useState(false);
@@ -17,7 +18,31 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   useEffect(() => {
     setCurrentImageUrl(zone.image_url || '');
     setMemoText(zone.memo || '');
+    if (zone) {
+      fetchZonePhotos();
+    }
   }, [zone]);
+
+  const fetchZonePhotos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rn_route_zone_photos')
+        .select('*')
+        .eq('zone_id', zone.id)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.warn('rn_route_zone_photos table query failed, falling back to zone.image_url:', error.message);
+        setZonePhotos([]);
+      } else {
+        setZonePhotos(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching zone photos:', err);
+      setZonePhotos([]);
+    }
+  };
 
   const handleSaveMemo = async () => {
     setSavingMemo(true);
@@ -46,71 +71,133 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   };
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
     setUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `zones/${zone.id}_${Date.now()}.${fileExt}`;
+      const uploadedPhotos = [...zonePhotos];
+      let firstPublicUrl = null;
 
-      // 1. Upload file to Supabase Storage bucket 'tip-photos'
-      const { data: storageData, error: uploadError } = await supabase.storage
-        .from('tip-photos')
-        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `zones/${zone.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      if (uploadError) throw uploadError;
+        // 1. Upload file to Supabase Storage bucket 'tip-photos'
+        const { data: storageData, error: uploadError } = await supabase.storage
+          .from('tip-photos')
+          .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
-      // 2. Get Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('tip-photos')
-        .getPublicUrl(fileName);
+        if (uploadError) throw uploadError;
 
-      // 3. Update rn_route_zones table with the new image_url
-      const { error: dbError } = await supabase
+        // 2. Get Public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('tip-photos')
+          .getPublicUrl(fileName);
+
+        if (!firstPublicUrl) {
+          firstPublicUrl = publicUrl;
+        }
+
+        // 3. Try to insert to rn_route_zone_photos
+        try {
+          const { data: dbData, error: dbError } = await supabase
+            .from('rn_route_zone_photos')
+            .insert({
+              zone_id: zone.id,
+              storage_path: publicUrl,
+              uploaded_by: currentUser.id
+            })
+            .select()
+            .single();
+
+          if (!dbError && dbData) {
+            uploadedPhotos.push(dbData);
+          } else if (dbError) {
+            console.warn('Could not insert to rn_route_zone_photos:', dbError.message);
+          }
+        } catch (dbErr) {
+          console.warn('rn_route_zone_photos insert threw error:', dbErr);
+        }
+      }
+
+      // 4. Update the rn_route_zones table with the first image_url as a fallback
+      const newImageUrl = uploadedPhotos.length > 0 ? uploadedPhotos[0].storage_path : (firstPublicUrl || zone.image_url);
+      
+      const { error: zoneUpdateError } = await supabase
         .from('rn_route_zones')
         .update({
-          image_url: publicUrl,
+          image_url: newImageUrl,
           updated_by: currentUser.id,
           updated_at: new Date().toISOString()
         })
         .eq('id', zone.id);
 
-      if (dbError) throw dbError;
+      if (zoneUpdateError) throw zoneUpdateError;
 
-      setCurrentImageUrl(publicUrl);
-      zone.image_url = publicUrl; // Update local reference
+      zone.image_url = newImageUrl;
+      setCurrentImageUrl(newImageUrl || '');
+      setZonePhotos(uploadedPhotos);
       alert('구역 이미지 팁이 등록되었습니다.');
+      if (onUpdate) onUpdate();
     } catch (err) {
-      console.error('Error uploading zone image:', err);
+      console.error('Error uploading zone images:', err);
       alert('이미지 업로드 실패: ' + err.message);
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleImageDelete = async () => {
-    if (!confirm('등록된 구역 이미지 팁을 삭제하시겠습니까?')) return;
+  const handlePhotoDelete = async (photoObj) => {
+    if (!confirm('이 구역 이미지를 삭제하시겠습니까?')) return;
 
     setUploading(true);
     try {
-      // Update rn_route_zones table set image_url to null
-      const { error: dbError } = await supabase
-        .from('rn_route_zones')
-        .update({
-          image_url: null,
-          updated_by: currentUser.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', zone.id);
+      if (photoObj.id) {
+        // Mark as deleted in rn_route_zone_photos
+        const { error: dbError } = await supabase
+          .from('rn_route_zone_photos')
+          .update({ is_deleted: true })
+          .eq('id', photoObj.id);
 
-      if (dbError) throw dbError;
+        if (dbError) throw dbError;
 
-      setCurrentImageUrl('');
-      zone.image_url = null; // Update local reference
-      alert('구역 이미지 팁이 삭제되었습니다.');
+        const updatedPhotos = zonePhotos.filter(p => p.id !== photoObj.id);
+        setZonePhotos(updatedPhotos);
+
+        // Update rn_route_zones image_url fallback
+        const newImageUrl = updatedPhotos.length > 0 ? updatedPhotos[0].storage_path : null;
+        await supabase
+          .from('rn_route_zones')
+          .update({
+            image_url: newImageUrl,
+            updated_by: currentUser.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', zone.id);
+
+        zone.image_url = newImageUrl;
+        setCurrentImageUrl(newImageUrl || '');
+      } else {
+        // Fallback: delete the single image_url column
+        const { error: dbError } = await supabase
+          .from('rn_route_zones')
+          .update({
+            image_url: null,
+            updated_by: currentUser.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', zone.id);
+
+        if (dbError) throw dbError;
+        zone.image_url = null;
+        setCurrentImageUrl('');
+      }
+      alert('이미지가 삭제되었습니다.');
+      if (onUpdate) onUpdate();
     } catch (err) {
-      console.error('Error deleting zone image:', err);
+      console.error('Error deleting zone photo:', err);
       alert('이미지 삭제 실패: ' + err.message);
     } finally {
       setUploading(false);
@@ -187,58 +274,79 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
 
       {/* Zone Image Tip Section */}
       <div style={{ marginBottom: '16px' }}>
-        {currentImageUrl ? (
-          <div>
-            <div style={styles.zoneImageWrapper} onClick={() => setIsImageExpanded(true)}>
-              <img src={currentImageUrl} alt={`${zone.name} 구역 전체 팁`} style={styles.zoneImage} />
-            </div>
-            {currentUser && currentUser.role !== 'viewer' && (
-              <div style={styles.imageActions}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ ...styles.actionBtn, padding: '8px 12px', minHeight: '36px', fontSize: '13px' }}
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  <Camera size={14} /> 이미지 변경
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  style={{ ...styles.actionBtn, padding: '8px 12px', minHeight: '36px', fontSize: '13px', backgroundColor: 'var(--danger)', color: '#FFFFFF' }}
-                  onClick={handleImageDelete}
-                  disabled={uploading}
-                >
-                  <Trash size={14} /> 이미지 삭제
-                </button>
+        {(() => {
+          const displayPhotos = zonePhotos.length > 0 
+            ? zonePhotos 
+            : (currentImageUrl ? [{ id: null, storage_path: currentImageUrl }] : []);
+
+          if (displayPhotos.length > 0) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>이 구역의 이미지 팁 ({displayPhotos.length})</span>
+                  {uploading && <span style={{ fontSize: '11px', color: 'var(--primary)' }}>업로드 중...</span>}
+                </div>
+                <div style={styles.photoContainer}>
+                  {displayPhotos.map((p, idx) => (
+                    <div key={p.id || idx} style={styles.photoLink}>
+                      <img 
+                        src={p.storage_path} 
+                        alt={`Zone Tip ${idx + 1}`} 
+                        style={styles.img} 
+                        onClick={() => setExpandedPhotoUrl(p.storage_path)}
+                      />
+                      {currentUser && currentUser.role !== 'viewer' && (
+                        <button
+                          type="button"
+                          style={styles.photoDeleteBadge}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePhotoDelete(p);
+                          }}
+                          title="이미지 삭제"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {currentUser && currentUser.role !== 'viewer' && (
+                    <div style={styles.photoUploadCard} onClick={() => fileInputRef.current?.click()}>
+                      <Plus size={20} color="var(--text-secondary)" />
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>추가</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        ) : (
-          currentUser && currentUser.role !== 'viewer' && (
-            <div style={styles.imagePlaceholderBtn} onClick={() => fileInputRef.current?.click()}>
-              <Camera size={24} color="var(--text-secondary)" />
-              <span style={styles.imagePlaceholderText}>
-                {uploading ? '업로드 중...' : '➕ 이 구역 전체의 이미지 팁 등록 (배치도 등)'}
-              </span>
-            </div>
-          )
-        )}
+            );
+          } else {
+            return (
+              currentUser && currentUser.role !== 'viewer' && (
+                <div style={styles.imagePlaceholderBtn} onClick={() => fileInputRef.current?.click()}>
+                  <Camera size={24} color="var(--text-secondary)" />
+                  <span style={styles.imagePlaceholderText}>
+                    {uploading ? '업로드 중...' : '➕ 이 구역 전체의 이미지 팁 등록 (배치도 등)'}
+                  </span>
+                </div>
+              )
+            );
+          }
+        })()}
         <input
           type="file"
           accept="image/*"
           ref={fileInputRef}
           onChange={handleImageUpload}
+          multiple
           style={{ display: 'none' }}
         />
       </div>
 
       {/* Image Zoom Lightbox Modal */}
-      {isImageExpanded && (
-        <div style={styles.imageModalOverlay} onClick={() => setIsImageExpanded(false)}>
-          <img src={currentImageUrl} alt={`${zone.name} 구역 전체 팁`} style={styles.imageModalContent} />
-          <button style={styles.imageModalCloseBtn} onClick={() => setIsImageExpanded(false)}>✕</button>
+      {expandedPhotoUrl && (
+        <div style={styles.imageModalOverlay} onClick={() => setExpandedPhotoUrl(null)}>
+          <img src={expandedPhotoUrl} alt={`${zone.name} 구역 이미지`} style={styles.imageModalContent} />
+          <button style={styles.imageModalCloseBtn} onClick={() => setExpandedPhotoUrl(null)}>✕</button>
         </div>
       )}
 
@@ -595,29 +703,61 @@ const styles = {
     color: 'var(--text-primary)',
     fontWeight: '500',
   },
-  zoneImageWrapper: {
-    width: '100%',
-    maxHeight: '220px',
-    borderRadius: 'var(--radius-md)',
-    overflow: 'hidden',
-    border: '1px solid var(--bg-card-border)',
-    marginBottom: '10px',
-    cursor: 'pointer',
-    position: 'relative',
-    backgroundColor: '#121824',
+  photoContainer: {
+    display: 'flex',
+    gap: '12px',
+    overflowX: 'auto',
+    padding: '8px 4px',
+    marginBottom: '16px',
+    scrollbarWidth: 'none',
   },
-  zoneImage: {
+  photoLink: {
+    position: 'relative',
+    flexShrink: 0,
+    width: '100px',
+    height: '100px',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    border: '1.5px solid var(--bg-card-border)',
+    backgroundColor: '#121824',
+    cursor: 'pointer',
+  },
+  img: {
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
-    display: 'block',
-    maxHeight: '220px',
-    margin: '0 auto',
+    objectFit: 'cover',
   },
-  imageActions: {
+  photoDeleteBadge: {
+    position: 'absolute',
+    top: '6px',
+    right: '6px',
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
+    color: '#FFFFFF',
+    border: 'none',
+    fontSize: '11px',
     display: 'flex',
-    gap: '8px',
-    marginBottom: '10px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+    fontWeight: 'bold',
+    zIndex: 10,
+  },
+  photoUploadCard: {
+    flexShrink: 0,
+    width: '100px',
+    height: '100px',
+    borderRadius: '12px',
+    border: '1.5px dashed var(--bg-card-border)',
+    backgroundColor: 'var(--bg-input)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
   },
   imagePlaceholderBtn: {
     width: '100%',

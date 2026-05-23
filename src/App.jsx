@@ -11,6 +11,7 @@ import ZoneDetail from './components/ZoneDetail';
 import PathForm from './components/PathForm';
 import { Compass, LogOut, Plus, MapPin, Locate } from 'lucide-react';
 import { getDbUserId } from './utils/userUtils';
+import { isPointInPolygon } from './utils/geoUtils';
 
 export default function App() {
   // Authentication States
@@ -153,6 +154,29 @@ export default function App() {
     setClickLng(lng);
     setSheetTitle(tip ? '배송팁 수정하기' : '새로운 배송팁 등록');
     setSheetContent('tip-form');
+    setSheetOpen(true);
+  };
+
+  const handleMapClick = (lat, lng) => {
+    const matchedZone = zones.find(z => !z.is_deleted && isPointInPolygon(lat, lng, z.polygon));
+    
+    // If viewer (guest) and not inside any zone, do nothing
+    if (currentUser?.role === 'viewer' && !matchedZone) {
+      return;
+    }
+
+    setClickLat(lat);
+    setClickLng(lng);
+    setSelectedTip(null);
+    
+    if (currentUser?.role === 'viewer') {
+      // If guest and inside a zone, go straight to zone details
+      openZoneDetail(matchedZone, lat, lng);
+      return;
+    }
+
+    setSheetTitle('팁 보기 / 팁 등록하기');
+    setSheetContent('map-click-menu');
     setSheetOpen(true);
   };
 
@@ -302,6 +326,49 @@ export default function App() {
             onUpdate={fetchData}
           />
         );
+      case 'map-click-menu': {
+        const matchedZone = zones.find(z => !z.is_deleted && isPointInPolygon(clickLat, clickLng, z.polygon));
+        return (
+          <div style={styles.menuContainer}>
+            <p style={styles.menuText}>선택한 위치: {matchedZone ? `[${matchedZone.name}] 구역 내부` : '구역 바깥 영역'}</p>
+            <div style={styles.menuButtons}>
+              {matchedZone && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={styles.menuBtn}
+                  onClick={() => openZoneDetail(matchedZone, clickLat, clickLng)}
+                >
+                  <MapPin size={18} />
+                  <span>팁 보기</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                className={matchedZone ? "btn btn-secondary" : "btn btn-primary"}
+                style={styles.menuBtn}
+                onClick={() => {
+                  setSheetTitle('새로운 배송팁 등록');
+                  setSheetContent('tip-form');
+                }}
+              >
+                <Plus size={18} />
+                <span>팁 등록하기</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ ...styles.menuBtn, color: 'var(--text-muted)' }}
+                onClick={() => setSheetOpen(false)}
+              >
+                <span>취소</span>
+              </button>
+            </div>
+          </div>
+        );
+      }
       case 'zone-form':
         return (
           <ZoneForm
@@ -401,7 +468,7 @@ export default function App() {
         paths={[]} // not needed dynamically
         selectedResult={selectedResult}
         currentUser={currentUser}
-        onMapClick={openTipForm}
+        onMapClick={handleMapClick}
         onMarkerClick={openTipDetail}
         onZoneClick={openZoneDetail}
         isDrawingZone={isDrawingZone}
@@ -516,4 +583,34 @@ const styles = {
     border: '1px solid rgba(255, 255, 255, 0.1)',
     cursor: 'pointer',
   }),
+  menuContainer: {
+    padding: '16px 8px 8px 8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  menuText: {
+    fontSize: '14px',
+    color: 'var(--text-secondary)',
+    fontWeight: '500',
+  },
+  menuButtons: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+  },
+  menuBtn: {
+    width: '100%',
+    padding: '14px 20px',
+    minHeight: '48px',
+    fontSize: '15px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
 };
