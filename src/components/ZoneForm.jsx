@@ -211,14 +211,17 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
     }));
   };
 
-  const lookupPostcodeRow = async (groupIndex, rowIndex) => {
+  const lookupPostcodeRow = async (groupIndex, rowIndex, overridePostcode = null) => {
     const row = codeGroups[groupIndex]?.rows[rowIndex];
     if (!row) return;
+
+    const postcodeToUse = overridePostcode || row.postcode;
+    if (!postcodeToUse || postcodeToUse.length !== 5) return;
 
     updateRow(groupIndex, rowIndex, { loading: true, error: '' });
 
     try {
-      const data = await fetchPostcodeZone(row.postcode);
+      const data = await fetchPostcodeZone(postcodeToUse);
       updateRow(groupIndex, rowIndex, { data, loading: false, error: '' });
 
       const inferredRegion = `${data.cityName || ''} ${data.districtName || ''}`.trim();
@@ -455,12 +458,11 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
                     return (
                       <div key={rowIndex} style={styles.postcodeRow}>
                         <div style={styles.postcodeRowControls}>
-                          <div style={styles.postcodeGrid}>
                           <input
                             type="text"
                             className="input-field"
                             style={styles.codeInput}
-                            placeholder="302A01"
+                            placeholder="코드 (302A01)"
                             value={row.label}
                             onChange={(e) => updateRow(groupIndex, rowIndex, {
                               label: e.target.value.toUpperCase(),
@@ -475,36 +477,38 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
                             style={styles.postcodeInput}
                             placeholder="우편번호"
                             value={row.postcode}
-                            onChange={(e) => updateRow(groupIndex, rowIndex, {
-                              postcode: e.target.value.replace(/\D/g, '').slice(0, 5),
-                              data: null,
-                              error: '',
-                            })}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 5);
+                              updateRow(groupIndex, rowIndex, {
+                                postcode: val,
+                                data: null,
+                                error: '',
+                              });
+                              if (val.length === 5 && row.label.trim()) {
+                                lookupPostcodeRow(groupIndex, rowIndex, val);
+                              }
+                            }}
                           />
-                          </div>
-                          <div style={styles.postcodeActions}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={styles.rowActionBtn}
-                            onClick={() => lookupPostcodeRow(groupIndex, rowIndex)}
-                            disabled={row.loading || row.postcode.length !== 5 || !row.label.trim()}
-                            title="우편번호 조회"
-                          >
-                            <Search size={16} />
-                            {row.loading ? '조회 중...' : '우편번호 조회'}
-                          </button>
                           <button
                             type="button"
                             className="btn btn-secondary"
                             style={styles.iconOnlyBtn}
+                            onClick={() => lookupPostcodeRow(groupIndex, rowIndex)}
+                            disabled={row.loading || row.postcode.length !== 5 || !row.label.trim()}
+                            title="우편번호 조회"
+                          >
+                            <Search size={16} className={row.loading ? "spin" : ""} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ ...styles.iconOnlyBtn, color: 'var(--danger)' }}
                             onClick={() => removeRow(groupIndex, rowIndex)}
                             disabled={group.rows.length === 1}
                             title="행 삭제"
                           >
                             <Trash2 size={16} />
                           </button>
-                          </div>
                         </div>
                         {row.data && (
                           <div style={styles.lookupSuccess}>
@@ -713,20 +717,23 @@ const styles = {
   },
   postcodeRowControls: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  postcodeGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-    gap: '8px',
     alignItems: 'center',
+    gap: '8px',
+    width: '100%',
   },
   codeInput: {
-    minWidth: 0,
+    flex: 1.2,
+    minWidth: '60px',
+    height: '40px',
+    padding: '8px 12px',
+    fontSize: '14px',
   },
   postcodeInput: {
-    minWidth: 0,
+    flex: 1,
+    minWidth: '60px',
+    height: '40px',
+    padding: '8px 12px',
+    fontSize: '14px',
     textAlign: 'center',
   },
   iconTextBtn: {
@@ -738,24 +745,11 @@ const styles = {
   iconOnlyBtn: {
     width: '40px',
     height: '40px',
-    padding: 0,
+    borderRadius: '10px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  postcodeActions: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 40px',
-    gap: '8px',
-    alignItems: 'center',
-  },
-  rowActionBtn: {
-    minWidth: 0,
-    height: '40px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
+    flexShrink: 0,
   },
   addRowBtn: {
     display: 'inline-flex',
