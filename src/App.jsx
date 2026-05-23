@@ -287,7 +287,7 @@ export default function App() {
         return (
           <PathForm
             path={null}
-            pathPoints={drawCoords}
+            pathPoints={drawCoords[0] || []}
             zoneId={drawingZoneId}
             currentUser={currentUser}
             onSave={() => {

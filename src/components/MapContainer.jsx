@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { isPointInPolygon } from '../utils/geoUtils';
-import { Navigation, Plus, Check, X, ShieldAlert, Map as MapIcon, ArrowRightLeft } from 'lucide-react';
+import { isPointInPolygon, getPolygonCentroid } from '../utils/geoUtils';
+import { Navigation, Plus, Check, X, ShieldAlert, Map as MapIcon, ArrowRightLeft, Layers } from 'lucide-react';
 
 const MARKER_TYPES = {
   vehicle_entrance: { emoji: '🚗', label: '차량 진입구' },
@@ -29,7 +29,7 @@ export default function MapContainer({
   setIsDrawingPath,
   activePathId,
   setActivePathId,
-  drawCoords,
+  drawCoords, // Format: Double Array [ [ {lat,lng}, {lat,lng} ], [ ... ] ]
   setDrawCoords,
   onFinishDrawingZone,
   onFinishDrawingPath,
@@ -39,8 +39,11 @@ export default function MapContainer({
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [markers, setMarkers] = useState([]);
   const [polygons, setPolygons] = useState([]);
+  const [zoneLabels, setZoneLabels] = useState([]); // Separate state for text labels
   const [pathLines, setPathLines] = useState([]);
-  const [drawingPolyline, setDrawingPolyline] = useState(null);
+  
+  // States for dynamic rendering of currently drawing shapes
+  const [drawingPolylines, setDrawingPolylines] = useState([]);
   const [drawingMarkers, setDrawingMarkers] = useState([]);
 
   // Dynamically load Naver Maps JavaScript API at runtime
@@ -56,7 +59,6 @@ export default function MapContainer({
       return;
     }
 
-    // Check if script element already exists to avoid duplicate loads
     const existingScript = document.getElementById('naver-maps-script');
     if (existingScript) {
       const handleScriptLoad = () => setScriptLoaded(true);
@@ -81,8 +83,7 @@ export default function MapContainer({
       return;
     }
 
-    // Default center (Seoul, or Busan, or custom)
-    const defaultCenter = new window.naver.maps.LatLng(35.2312, 129.0835); // Example: Pusan National Univ Area
+    const defaultCenter = new window.naver.maps.LatLng(35.2312, 129.0835); // Pusan National Univ Area
     const mapOptions = {
       center: defaultCenter,
       zoom: 16,
@@ -100,12 +101,22 @@ export default function MapContainer({
 
     // Map Click / Long Press Handling
     window.naver.maps.Event.addListener(map, 'click', (e) => {
+      const lat = e.coord.lat();
+      const lng = e.coord.lng();
+
       if (!isDrawingZone && !isDrawingPath) {
-        onMapClick(e.coord.lat(), e.coord.lng());
+        onMapClick(lat, lng);
       } else {
-        const lat = e.coord.lat();
-        const lng = e.coord.lng();
-        setDrawCoords(prev => [...prev, { lat, lng }]);
+        // Drawing Mode: Add Point to coordinates double array
+        setDrawCoords(prev => {
+          const next = [...prev];
+          if (next.length === 0) {
+            next.push([]);
+          }
+          // Push to the active polygon loop (last array)
+          next[next.length - 1] = [...next[next.length - 1], { lat, lng }];
+          return next;
+        });
       }
     });
 
@@ -137,14 +148,9 @@ export default function MapContainer({
       onMarkerClick(selectedResult.data);
     } else if (selectedResult.type === 'zone') {
       const zone = selectedResult.data;
-      if (zone.polygon && zone.polygon.coordinates) {
-        const coords = zone.polygon.coordinates[0];
-        let latSum = 0, lngSum = 0;
-        coords.forEach(c => {
-          lngSum += c[0];
-          latSum += c[1];
-        });
-        const centerLatLng = new window.naver.maps.LatLng(latSum / coords.length, lngSum / coords.length);
+      const centroid = getPolygonCentroid(zone.polygon);
+      if (centroid) {
+        const centerLatLng = new window.naver.maps.LatLng(centroid.lat, centroid.lng);
         mapInstance.setCenter(centerLatLng);
         mapInstance.setZoom(17);
         onZoneClick(zone);
@@ -152,39 +158,102 @@ export default function MapContainer({
     }
   }, [selectedResult, mapInstance]);
 
-  // Render Saved Zones (Polygons)
+  // Render Saved Zones (Polygons) and Centroid Text Labels
   useEffect(() => {
     if (!mapInstance || !zones) return;
 
+    // Clear existing polygons and labels
     polygons.forEach(p => p.setMap(null));
+    zoneLabels.forEach(l => l.setMap(null));
+    
     const newPolygons = [];
+    const newLabels = [];
 
     zones.forEach(zone => {
-      if (zone.is_deleted || !zone.polygon || !zone.polygon.coordinates) return;
+      if (zone.is_deleted || !zone.polygon) return;
 
-      const naverCoords = zone.polygon.coordinates[0].map(
-        c => new window.naver.maps.LatLng(c[1], c[0])
-      );
+      const geom = zone.polygon;
+      
+      // Draw Polygon / MultiPolygon
+      if (geom.type === 'MultiPolygon') {
+        // MultiPolygon coordinates structure: [ [ [ [lng, lat], ... ] ], [ [ [lng, lat], ... ] ] ]
+        geom.coordinates.forEach(coordsGroup => {
+          const naverCoords = coordsGroup[0].map(
+            c => new window.naver.maps.LatLng(c[1], c[0])
+          );
 
-      const polygon = new window.naver.maps.Polygon({
-        map: mapInstance,
-        paths: [naverCoords],
-        fillColor: zone.color || '#6366F1',
-        fillOpacity: 0.15,
-        strokeColor: zone.color || '#6366F1',
-        strokeOpacity: 0.8,
-        strokeWeight: 2,
-        clickable: true,
-      });
+          const polygon = new window.naver.maps.Polygon({
+            map: mapInstance,
+            paths: [naverCoords],
+            fillColor: zone.color || '#6366F1',
+            fillOpacity: 0.15,
+            strokeColor: zone.color || '#6366F1',
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            clickable: true,
+          });
 
-      window.naver.maps.Event.addListener(polygon, 'click', () => {
-        onZoneClick(zone);
-      });
+          window.naver.maps.Event.addListener(polygon, 'click', () => {
+            onZoneClick(zone);
+          });
+          newPolygons.push(polygon);
+        });
+      } else if (geom.type === 'Polygon') {
+        const naverCoords = geom.coordinates[0].map(
+          c => new window.naver.maps.LatLng(c[1], c[0])
+        );
 
-      newPolygons.push(polygon);
+        const polygon = new window.naver.maps.Polygon({
+          map: mapInstance,
+          paths: [naverCoords],
+          fillColor: zone.color || '#6366F1',
+          fillOpacity: 0.15,
+          strokeColor: zone.color || '#6366F1',
+          strokeOpacity: 0.8,
+          strokeWeight: 2,
+          clickable: true,
+        });
+
+        window.naver.maps.Event.addListener(polygon, 'click', () => {
+          onZoneClick(zone);
+        });
+        newPolygons.push(polygon);
+      }
+
+      // Draw Zone Text Label on Centroid
+      const centroid = getPolygonCentroid(geom);
+      if (centroid) {
+        const labelContent = `
+          <div style="
+            color: ${zone.color || '#6366F1'};
+            font-weight: 800;
+            font-size: 15px;
+            white-space: nowrap;
+            text-shadow: -1.5px 0 #000, 0 1.5px #000, 1.5px 0 #000, 0 -1.5px #000;
+            user-select: none;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+          ">
+            ${zone.name}
+          </div>
+        `;
+
+        const labelMarker = new window.naver.maps.Marker({
+          position: new window.naver.maps.LatLng(centroid.lat, centroid.lng),
+          map: mapInstance,
+          icon: {
+            content: labelContent,
+            anchor: new window.naver.maps.Point(0, 0),
+          },
+          clickable: false, // Don't block map clicks
+        });
+
+        newLabels.push(labelMarker);
+      }
     });
 
     setPolygons(newPolygons);
+    setZoneLabels(newLabels);
   }, [zones, mapInstance]);
 
   // Render Route Tips (Markers with age calculation)
@@ -344,59 +413,75 @@ export default function MapContainer({
     drawSavedPath();
   }, [activePathId, mapInstance]);
 
-  // Handle Drawing Modes UI (Visual updates of unsaved lines/points)
+  // Handle Drawing Modes UI (Support MultiPolygons coordinates double loops)
   useEffect(() => {
     if (!mapInstance) return;
 
-    if (drawingPolyline) drawingPolyline.setMap(null);
+    // Remove old drawing polylines and tags
+    drawingPolylines.forEach(pl => pl.setMap(null));
     drawingMarkers.forEach(m => m.setMap(null));
 
-    if ((!isDrawingZone && !isDrawingPath) || drawCoords.length === 0) {
-      setDrawingPolyline(null);
+    const totalPoints = drawCoords.reduce((sum, currentPoly) => sum + currentPoly.length, 0);
+
+    if ((!isDrawingZone && !isDrawingPath) || totalPoints === 0) {
+      setDrawingPolylines([]);
       setDrawingMarkers([]);
       return;
     }
 
-    const naverCoords = drawCoords.map(pt => new window.naver.maps.LatLng(pt.lat, pt.lng));
+    const newPolylines = [];
+    const newMarkers = [];
 
-    const polyline = new window.naver.maps.Polyline({
-      map: mapInstance,
-      path: naverCoords,
-      strokeColor: isDrawingZone ? '#6366F1' : '#EF4444',
-      strokeOpacity: 0.8,
-      strokeWeight: 3,
-      strokeStyle: isDrawingZone ? 'dash' : 'solid',
-    });
-    setDrawingPolyline(polyline);
+    // Loop over each separate polygon loop
+    drawCoords.forEach((currentPoly, polyIdx) => {
+      if (currentPoly.length === 0) return;
 
-    const newDrawingMarkers = drawCoords.map((pt, idx) => {
-      const tagContent = `
-        <div style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 20px;
-          height: 20px;
-          background-color: ${isDrawingZone ? '#6366F1' : '#EF4444'};
-          color: #FFFFFF;
-          border: 1.5px solid #FFFFFF;
-          border-radius: 50%;
-          font-size: 11px;
-          font-weight: bold;
-        ">
-          ${idx + 1}
-        </div>
-      `;
-      return new window.naver.maps.Marker({
-        position: new window.naver.maps.LatLng(pt.lat, pt.lng),
+      const naverCoords = currentPoly.map(pt => new window.naver.maps.LatLng(pt.lat, pt.lng));
+
+      // Draw dashed visual polyline for currently drawn segment
+      const polyline = new window.naver.maps.Polyline({
         map: mapInstance,
-        icon: {
-          content: tagContent,
-          anchor: new window.naver.maps.Point(10, 10),
-        },
+        path: naverCoords,
+        strokeColor: isDrawingZone ? '#6366F1' : '#EF4444',
+        strokeOpacity: 0.8,
+        strokeWeight: 3,
+        strokeStyle: isDrawingZone ? 'dash' : 'solid',
+      });
+      newPolylines.push(polyline);
+
+      // Draw numbered marker badge for each point
+      currentPoly.forEach((pt, pointIdx) => {
+        const tagContent = `
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            background-color: ${isDrawingZone ? '#6366F1' : '#EF4444'};
+            color: #FFFFFF;
+            border: 1.5px solid #FFFFFF;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: bold;
+          ">
+            ${isDrawingZone ? `${polyIdx + 1}-${pointIdx + 1}` : `${pointIdx + 1}`}
+          </div>
+        `;
+        const marker = new window.naver.maps.Marker({
+          position: new window.naver.maps.LatLng(pt.lat, pt.lng),
+          map: mapInstance,
+          icon: {
+            content: tagContent,
+            anchor: new window.naver.maps.Point(10, 10),
+          },
+        });
+        newMarkers.push(marker);
       });
     });
-    setDrawingMarkers(newDrawingMarkers);
+
+    setDrawingPolylines(newPolylines);
+    setDrawingMarkers(newMarkers);
   }, [drawCoords, isDrawingZone, isDrawingPath, mapInstance]);
 
   const cancelDrawing = () => {
@@ -405,9 +490,18 @@ export default function MapContainer({
     setDrawCoords([]);
   };
 
+  // Add a separate disjoint polygon path for MultiPolygons
+  const addNewPolygonLoop = () => {
+    const lastLoop = drawCoords[drawCoords.length - 1];
+    if (!lastLoop || lastLoop.length < 3) {
+      alert('현재 그리고 있는 영역의 점을 최소 3개 이상 찍은 뒤 추가 영역을 만드세요.');
+      return;
+    }
+    setDrawCoords(prev => [...prev, []]);
+  };
+
   return (
     <div style={styles.container}>
-      {/* Loading state before script mounts */}
       {!scriptLoaded && (
         <div style={styles.mapLoading}>
           <span>네이버 지도 초기화 중...</span>
@@ -421,26 +515,44 @@ export default function MapContainer({
             <MapIcon size={18} color="var(--primary)" />
             <span>{isDrawingZone ? '구역 폴리곤 그리기' : '동선 포인트 지정'}</span>
           </div>
+          
           <p style={styles.drawingInfo}>
-            지도를 터치하여 점을 찍어주세요. (최소 {isDrawingZone ? 3 : 2}개)
+            {isDrawingZone 
+              ? '지도를 클릭해 영역을 그리세요. 떨어져 있는 구역은 [분리된 영역 추가]를 클릭하여 더 그릴 수 있습니다.' 
+              : '동선 순서대로 지도를 클릭해 점을 찍으세요.'}
           </p>
 
           <div style={styles.drawActions}>
-            <button className="btn btn-secondary" style={styles.drawBtn} onClick={cancelDrawing}>
+            <button className="btn btn-secondary" style={{ ...styles.drawBtn, flex: 1 }} onClick={cancelDrawing}>
               <X size={16} /> 취소
             </button>
+
+            {isDrawingZone && (
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ ...styles.drawBtn, flex: 2, borderColor: 'var(--primary)', color: 'var(--primary)' }} 
+                onClick={addNewPolygonLoop}
+              >
+                <Layers size={16} /> 분리된 영역 추가
+              </button>
+            )}
+
             <button
               className="btn btn-primary"
-              style={styles.drawBtn}
+              style={{ ...styles.drawBtn, flex: 1.5 }}
               onClick={() => {
                 if (isDrawingZone) {
-                  if (drawCoords.length < 3) {
-                    alert('꼭짓점을 3개 이상 찍어주세요.');
+                  const validLoops = drawCoords.filter(loop => loop.length >= 3);
+                  if (validLoops.length === 0) {
+                    alert('최소 1개 이상의 올바른 영역(꼭짓점 3개 이상)을 그려주세요.');
                     return;
                   }
                   onFinishDrawingZone();
                 } else {
-                  if (drawCoords.length < 2) {
+                  // Path uses drawCoords[0]
+                  const pathPoints = drawCoords[0] || [];
+                  if (pathPoints.length < 2) {
                     alert('동선 포인트를 2개 이상 찍어주세요.');
                     return;
                   }
@@ -461,7 +573,7 @@ export default function MapContainer({
             style={styles.actionFloatBtn}
             onClick={() => {
               setIsDrawingZone(true);
-              setDrawCoords([]);
+              setDrawCoords([[]]); // Initialize with empty double array
             }}
             title="새 구역 그리기"
           >
@@ -524,6 +636,9 @@ const styles = {
     border: '1px solid var(--bg-card-border)',
     boxShadow: 'var(--shadow-lg)',
     animation: 'slideUp 0.3s ease-out',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
   },
   drawingTitle: {
     display: 'flex',
@@ -532,22 +647,25 @@ const styles = {
     fontWeight: '700',
     fontSize: '16px',
     color: 'var(--text-primary)',
-    marginBottom: '4px',
   },
   drawingInfo: {
     fontSize: '13px',
     color: 'var(--text-secondary)',
-    marginBottom: '16px',
+    lineHeight: '1.4',
   },
   drawActions: {
     display: 'flex',
-    gap: '12px',
+    gap: '8px',
+    width: '100%',
   },
   drawBtn: {
-    flex: 1,
-    padding: '10px 16px',
+    padding: '10px 12px',
     minHeight: '40px',
-    fontSize: '14px',
+    fontSize: '13px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
   },
   adminTriggers: {
     position: 'absolute',

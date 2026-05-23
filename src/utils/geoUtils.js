@@ -1,13 +1,13 @@
 import * as turf from '@turf/turf';
 
 /**
- * Checks if a coordinate point [lat, lng] is inside a GeoJSON polygon structure.
+ * Checks if a coordinate point [lat, lng] is inside a GeoJSON polygon or multipolygon.
  * Turf.js uses [lng, lat] coordinate format.
  * 
  * @param {number} lat - Latitude
  * @param {number} lng - Longitude
- * @param {object} polygonGeoJSON - GeoJSON polygon coordinates or feature
- * @returns {boolean} - True if point is inside polygon
+ * @param {object} polygonGeoJSON - GeoJSON polygon/multipolygon structure
+ * @returns {boolean} - True if point is inside
  */
 export function isPointInPolygon(lat, lng, polygonGeoJSON) {
   try {
@@ -16,14 +16,13 @@ export function isPointInPolygon(lat, lng, polygonGeoJSON) {
     // Create Turf point [lng, lat]
     const point = turf.point([lng, lat]);
     
-    // Ensure we have a valid Polygon geometry
     let polyGeometry;
     if (polygonGeoJSON.type === 'Feature') {
       polyGeometry = polygonGeoJSON.geometry;
-    } else if (polygonGeoJSON.type === 'Polygon') {
+    } else if (polygonGeoJSON.type === 'Polygon' || polygonGeoJSON.type === 'MultiPolygon') {
       polyGeometry = polygonGeoJSON;
     } else if (Array.isArray(polygonGeoJSON)) {
-      // If it's a raw array of [lng, lat] or [{lat, lng}]
+      // Fallback fallback raw coordinates
       let coords = [];
       if (polygonGeoJSON.length > 0 && typeof polygonGeoJSON[0] === 'object' && 'lat' in polygonGeoJSON[0]) {
         coords = polygonGeoJSON.map(p => [p.lng, p.lat]);
@@ -31,7 +30,6 @@ export function isPointInPolygon(lat, lng, polygonGeoJSON) {
         coords = polygonGeoJSON;
       }
       
-      // Close the polygon loop if it's not closed
       if (coords.length > 0 && (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1])) {
         coords.push(coords[0]);
       }
@@ -48,7 +46,70 @@ export function isPointInPolygon(lat, lng, polygonGeoJSON) {
 }
 
 /**
- * Finds which zone containing the point from a list of zones.
+ * Calculates the center (centroid) of a Polygon or MultiPolygon.
+ * Used for placing zone text labels on the map.
+ * 
+ * @param {object} polygonGeoJSON - GeoJSON geometry or feature
+ * @returns {object|null} - {lat, lng} of centroid or null
+ */
+export function getPolygonCentroid(polygonGeoJSON) {
+  try {
+    if (!polygonGeoJSON) return null;
+    
+    let geom = polygonGeoJSON;
+    if (polygonGeoJSON.type === 'Feature') {
+      geom = polygonGeoJSON.geometry;
+    }
+    
+    // Ensure it is a valid GeoJSON feature before passing to turf
+    const feature = turf.feature(geom);
+    const centerPoint = turf.centroid(feature);
+    const [lng, lat] = centerPoint.geometry.coordinates;
+    
+    return { lat, lng };
+  } catch (error) {
+    console.error('Centroid calculation failed:', error);
+    
+    // Fallback: simple bounding box math if turf centroid fails
+    try {
+      let lats = [];
+      let lngs = [];
+      
+      const extractCoords = (arr) => {
+        if (typeof arr[0] === 'number') {
+          lngs.push(arr[0]);
+          lats.push(arr[1]);
+        } else {
+          arr.forEach(extractCoords);
+        }
+      };
+      
+      if (polygonGeoJSON.coordinates) {
+        extractCoords(polygonGeoJSON.coordinates);
+      } else if (Array.isArray(polygonGeoJSON)) {
+        extractCoords(polygonGeoJSON);
+      }
+      
+      if (lats.length === 0) return null;
+      
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+      
+      return {
+        lat: (minLat + maxLat) / 2,
+        lng: (minLng + maxLng) / 2
+      };
+    } catch (fallbackError) {
+      console.error('Centroid fallback failed:', fallbackError);
+      return null;
+    }
+  }
+}
+
+/**
+ * Finds which zone contains the point.
  * 
  * @param {number} lat - Latitude
  * @param {number} lng - Longitude
@@ -60,7 +121,6 @@ export function findZoneForPoint(lat, lng, zones) {
   
   for (const zone of zones) {
     if (zone.is_deleted) continue;
-    // Supposing zone.polygon stores the GeoJSON or coordinate array
     if (isPointInPolygon(lat, lng, zone.polygon)) {
       return zone;
     }

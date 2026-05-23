@@ -39,8 +39,10 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       return;
     }
 
-    if (!zone && (!polygonCoords || polygonCoords.length < 3)) {
-      alert('지도상에 최소 3개 이상의 꼭짓점을 찍어 구역을 그려주세요.');
+    const validLoops = polygonCoords ? polygonCoords.filter(loop => loop.length >= 3) : [];
+
+    if (!zone && validLoops.length === 0) {
+      alert('지도상에 최소 1개 이상의 올바른 영역(꼭짓점 3개 이상)을 그려주세요.');
       return;
     }
 
@@ -52,7 +54,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       if (zone) {
         // UPDATE Existing Zone
         const { error } = await supabase
-          .from('rn_route_zones') // [Prefix Update] route_zones -> rn_route_zones
+          .from('rn_route_zones')
           .update({
             name: name.trim(),
             color,
@@ -64,18 +66,22 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
 
         if (error) throw error;
       } else {
-        // INSERT New Zone
-        // Convert lat/lng coordinate format to GeoJSON polygon format
-        // Close polygon loop automatically
-        const coordinates = [...polygonCoords.map(pt => [pt.lng, pt.lat])];
-        coordinates.push([polygonCoords[0].lng, polygonCoords[0].lat]);
+        // INSERT New Zone as MultiPolygon GeoJSON
+        // Coordinates structure: [ [ [ [lng, lat], ... (closed) ] ], [ [ [lng, lat], ... (closed) ] ] ]
+        const multiPolygonCoords = validLoops.map(loop => {
+          const ring = loop.map(pt => [pt.lng, pt.lat]);
+          // Close the polygon ring loop by repeating the first coordinate
+          ring.push([loop[0].lng, loop[0].lat]);
+          return [ring];
+        });
+
         const geoJSONPolygon = {
-          type: 'Polygon',
-          coordinates: [coordinates]
+          type: 'MultiPolygon',
+          coordinates: multiPolygonCoords
         };
 
         const { error } = await supabase
-          .from('rn_route_zones') // [Prefix Update] route_zones -> rn_route_zones
+          .from('rn_route_zones')
           .insert({
             name: name.trim(),
             color,
@@ -95,6 +101,11 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       setSaving(false);
     }
   };
+
+  const totalPoints = polygonCoords 
+    ? polygonCoords.reduce((sum, loop) => sum + loop.length, 0) 
+    : 0;
+  const loopCount = polygonCoords ? polygonCoords.filter(l => l.length > 0).length : 0;
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
@@ -149,7 +160,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
 
       {!zone && (
         <div style={styles.infoBox}>
-          <span>지도에 찍힌 점 개수: <strong>{polygonCoords?.length || 0}개</strong> (자동 연결됨)</span>
+          <span>분리된 영역 수: <strong>{loopCount}개</strong> (총 꼭짓점 수: {totalPoints}개)</span>
         </div>
       )}
 
