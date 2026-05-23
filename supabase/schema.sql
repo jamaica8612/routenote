@@ -217,7 +217,7 @@ CREATE OR REPLACE TRIGGER on_route_tip_updated_rn
 -- Create the bucket if it doesn't exist
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('tip-photos', 'tip-photos', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- RLS policies for storage objects in 'tip-photos' bucket
 CREATE POLICY "rn_storage_select_tip_photos" ON storage.objects
