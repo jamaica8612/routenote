@@ -113,65 +113,50 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE POLICY "rn_enable_read_for_all" ON public.rn_profiles
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_enable_update_for_owner" ON public.rn_profiles
-    FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "rn_write_profiles_for_all" ON public.rn_profiles
+    FOR ALL USING (true);
 
 -- Route Zones Policies
 CREATE POLICY "rn_read_zones_for_all" ON public.rn_route_zones
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_admin_write_zones" ON public.rn_route_zones
-    FOR ALL USING (
-        auth.role() = 'authenticated' AND public.rn_is_admin(auth.uid())
-    );
+CREATE POLICY "rn_write_zones_for_all" ON public.rn_route_zones
+    FOR ALL USING (true);
 
 -- Route Tips Policies
 CREATE POLICY "rn_read_tips_for_all" ON public.rn_route_tips
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_write_tips_for_auth" ON public.rn_route_tips
-    FOR ALL USING (
-        auth.role() = 'authenticated'
-    );
+CREATE POLICY "rn_write_tips_for_all" ON public.rn_route_tips
+    FOR ALL USING (true);
 
 -- Route Tip History Policies
 CREATE POLICY "rn_read_history_for_all" ON public.rn_route_tip_history
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_insert_history_for_auth" ON public.rn_route_tip_history
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "rn_write_history_for_all" ON public.rn_route_tip_history
+    FOR ALL USING (true);
 
 -- Route Tip Photos Policies
 CREATE POLICY "rn_read_photos_for_all" ON public.rn_route_tip_photos
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_insert_photos_for_auth" ON public.rn_route_tip_photos
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY "rn_delete_photos_for_owner_or_admin" ON public.rn_route_tip_photos
-    FOR UPDATE USING (
-        auth.role() = 'authenticated' AND (
-            uploaded_by = auth.uid() OR public.rn_is_admin(auth.uid())
-        )
-    );
+CREATE POLICY "rn_write_photos_for_all" ON public.rn_route_tip_photos
+    FOR ALL USING (true);
 
 -- Route Paths Policies
 CREATE POLICY "rn_read_paths_for_all" ON public.rn_route_paths
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_admin_write_paths" ON public.rn_route_paths
-    FOR ALL USING (
-        auth.role() = 'authenticated' AND public.rn_is_admin(auth.uid())
-    );
+CREATE POLICY "rn_write_paths_for_all" ON public.rn_route_paths
+    FOR ALL USING (true);
 
 -- Route Path Points Policies
 CREATE POLICY "rn_read_path_points_for_all" ON public.rn_route_path_points
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_admin_write_path_points" ON public.rn_route_path_points
-    FOR ALL USING (
-        auth.role() = 'authenticated' AND public.rn_is_admin(auth.uid())
-    );
+CREATE POLICY "rn_write_path_points_for_all" ON public.rn_route_path_points
+    FOR ALL USING (true);
 
 
 -- Trigger: Create profile automatically on sign up (rn_profiles 전용)
