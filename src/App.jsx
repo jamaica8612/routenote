@@ -152,8 +152,10 @@ export default function App() {
     setSheetOpen(true);
   };
 
-  const openZoneDetail = (zone) => {
+  const openZoneDetail = (zone, lat = null, lng = null) => {
     setSelectedZone(zone);
+    setClickLat(lat);
+    setClickLng(lng);
     setSheetTitle('구역 세부 정보');
     setSheetContent('zone-detail');
     setSheetOpen(true);
@@ -255,6 +257,11 @@ export default function App() {
             zone={selectedZone}
             currentUser={currentUser}
             tips={tips}
+            clickLat={clickLat}
+            clickLng={clickLng}
+            onAddTipAtClick={(lat, lng) => {
+              openTipForm(lat, lng);
+            }}
             onEdit={(z) => {
               setSheetTitle('구역 정보 수정');
               setSheetContent('zone-form');
@@ -401,39 +408,41 @@ export default function App() {
         }}
       />
 
-      {/* 3. UPPER UTILITY BUTTONS (LOGOUT & MAP ACTIONS) */}
+      {/* 3. UPPER LOGOUT UTILITY */}
       {!isDrawingZone && !isDrawingPath && (
-        <>
-          {/* Logout Button (Top-Right) */}
-          <button
-            className="btn btn-secondary btn-icon glass"
-            onClick={handleLogout}
-            title="로그아웃"
-            style={styles.headerLogoutBtn}
-          >
-            <LogOut size={18} />
-          </button>
-          
-          {/* GPS Location Centering Button (Below Logout) */}
-          <button
-            className="btn btn-secondary btn-icon glass"
-            onClick={handleMoveToCurrentLocation}
-            title="현재 위치로 지도 이동"
-            style={styles.headerLocationBtn}
-          >
-            <Compass size={20} color="var(--primary)" />
-          </button>
+        <button
+          className="btn btn-icon"
+          onClick={handleLogout}
+          title="로그아웃"
+          style={styles.headerLogoutBtn}
+        >
+          <LogOut size={18} color="#FFFFFF" />
+        </button>
+      )}
 
-          {/* GPS Current Location Tip Register (Below Location button) */}
+      {/* 3.5. BOTTOM LEFT FLOATING ACTIONS */}
+      {!isDrawingZone && !isDrawingPath && (
+        <div style={styles.floatingUI}>
+          {/* GPS Current Location Tip Register */}
           <button
             className="btn btn-primary btn-icon"
             onClick={handleCurrentLocationRegister}
             title="현재 위치에 배송팁 등록"
-            style={styles.headerGpsBtn}
+            style={{ ...styles.circleFloatBtn, backgroundColor: 'var(--success)', color: '#FFFFFF' }}
           >
-            <Plus size={22} />
+            <Plus size={24} />
           </button>
-        </>
+          
+          {/* Move to Current Location Button */}
+          <button
+            className="btn btn-secondary btn-icon glass"
+            onClick={handleMoveToCurrentLocation}
+            title="현재 위치로 지도 이동"
+            style={styles.circleFloatBtn}
+          >
+            <Compass size={20} color="var(--primary)" />
+          </button>
+        </div>
       )}
 
       {/* 4. MODAL SLIDE BOTTOM SHEET */}
@@ -470,39 +479,27 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '1px solid var(--bg-card-border)',
-    cursor: 'pointer',
-  },
-  headerLocationBtn: {
-    position: 'absolute',
-    top: '82px',
-    right: '16px',
-    width: '54px',
-    height: '54px',
-    borderRadius: '50%',
-    boxShadow: 'var(--shadow-md)',
-    zIndex: 900,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid var(--bg-card-border)',
-    cursor: 'pointer',
-  },
-  headerGpsBtn: {
-    position: 'absolute',
-    top: '148px',
-    right: '16px',
-    width: '54px',
-    height: '54px',
-    borderRadius: '50%',
-    boxShadow: 'var(--shadow-md)',
-    zIndex: 900,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'var(--success)',
-    color: '#FFFFFF',
+    backgroundColor: '#F43F5E', // Rose red for high visibility and logout concept
     border: 'none',
+    cursor: 'pointer',
+  },
+  floatingUI: {
+    position: 'absolute',
+    bottom: '40px', // Raised slightly to avoid Naver Corp copyright overlap
+    left: '16px',
+    zIndex: 850,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  circleFloatBtn: {
+    borderRadius: '50%',
+    width: '54px',
+    height: '54px',
+    boxShadow: 'var(--shadow-md)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     cursor: 'pointer',
   },
 };

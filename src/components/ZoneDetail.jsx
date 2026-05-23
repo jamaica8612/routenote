@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText } from 'lucide-react';
 
-export default function ZoneDetail({ zone, currentUser, tips, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId }) {
+export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId }) {
   const [paths, setPaths] = useState([]);
   const [loadingPaths, setLoadingPaths] = useState(false);
 
@@ -61,6 +61,18 @@ export default function ZoneDetail({ zone, currentUser, tips, onEdit, onDelete, 
           <span style={styles.subtitle}>이 구역 팁 {zoneTips.length}개</span>
         </div>
       </div>
+
+      {/* Shortcut to register a tip at exact clicked location inside the zone */}
+      {clickLat && clickLng && (
+        <button
+          type="button"
+          className="btn"
+          style={styles.addTipAtClickBtn}
+          onClick={() => onAddTipAtClick(clickLat, clickLng)}
+        >
+          <Plus size={18} /> 이 위치에 배송팁 등록
+        </button>
+      )}
 
       {/* Zone Memo */}
       {zone.memo && (
@@ -192,6 +204,23 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     width: '100%',
+  },
+  addTipAtClickBtn: {
+    width: '100%',
+    marginBottom: '16px',
+    backgroundColor: 'var(--success)',
+    color: '#FFFFFF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px 24px',
+    fontSize: '15px',
+    fontWeight: '600',
+    borderRadius: 'var(--radius-md)',
+    border: 'none',
+    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
+    cursor: 'pointer',
   },
   header: {
     display: 'flex',

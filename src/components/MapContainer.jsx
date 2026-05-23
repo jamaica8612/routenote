@@ -231,8 +231,8 @@ export default function MapContainer({
           });
 
           if (shouldBeClickable) {
-            window.naver.maps.Event.addListener(polygon, 'click', () => {
-              onZoneClick(zone);
+            window.naver.maps.Event.addListener(polygon, 'click', (e) => {
+              onZoneClick(zone, e.coord.lat(), e.coord.lng());
             });
           }
           newPolygons.push(polygon);
@@ -254,8 +254,8 @@ export default function MapContainer({
         });
 
         if (shouldBeClickable) {
-          window.naver.maps.Event.addListener(polygon, 'click', () => {
-            onZoneClick(zone);
+          window.naver.maps.Event.addListener(polygon, 'click', (e) => {
+            onZoneClick(zone, e.coord.lat(), e.coord.lng());
           });
         }
         newPolygons.push(polygon);
