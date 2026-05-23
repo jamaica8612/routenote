@@ -10,6 +10,8 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   const [currentImageUrl, setCurrentImageUrl] = useState(zone.image_url || '');
   const [memoText, setMemoText] = useState(zone.memo || '');
   const [savingMemo, setSavingMemo] = useState(false);
+  const [isMemoExpanded, setIsMemoExpanded] = useState(false);
+  const [textareaExpanded, setTextareaExpanded] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
 
       zone.memo = memoText.trim();
       alert('구역 배송팁 메모가 저장되었습니다.');
+      setTextareaExpanded(false);
       if (onUpdate) onUpdate();
     } catch (err) {
       console.error('Error saving zone memo:', err);
@@ -241,9 +244,17 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
 
       {/* Zone Memo (For Guest Viewer - Read Only) */}
       {currentUser?.role === 'viewer' && zone.memo && (
-        <div style={styles.memoBox}>
+        <div style={{ ...styles.memoBox, cursor: 'pointer' }} onClick={() => setIsMemoExpanded(!isMemoExpanded)} title="클릭 시 전체 보기/접기">
           <FileText size={16} color="var(--text-secondary)" style={{ marginTop: '2px', flexShrink: 0 }} />
-          <p style={styles.memoText}>{zone.memo}</p>
+          <p style={{
+            ...styles.memoText,
+            display: isMemoExpanded ? 'block' : '-webkit-box',
+            WebkitLineClamp: isMemoExpanded ? 'none' : 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {zone.memo}
+          </p>
         </div>
       )}
 
@@ -252,13 +263,26 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         <div style={styles.memoSection}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>구역 전체 배송팁 메모</h3>
+            {textareaExpanded && (
+              <button
+                type="button"
+                style={styles.collapseLink}
+                onClick={() => setTextareaExpanded(false)}
+              >
+                메모창 접기
+              </button>
+            )}
           </div>
           <textarea
             className="input-field"
-            style={styles.memoTextarea}
+            style={{
+              ...styles.memoTextarea,
+              minHeight: textareaExpanded ? '200px' : '80px',
+            }}
             placeholder="구역 전체의 특이사항(예: 공동현관 비밀번호, 주차 팁 등)을 입력해 주세요."
             value={memoText}
             onChange={(e) => setMemoText(e.target.value)}
+            onFocus={() => setTextareaExpanded(true)}
           />
           <button
             type="button"
@@ -677,5 +701,14 @@ const styles = {
     minHeight: '38px',
     fontSize: '13px',
     borderRadius: '10px',
+  },
+  collapseLink: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--primary)',
+    fontSize: '12px',
+    cursor: 'pointer',
+    padding: 0,
+    fontWeight: '600',
   },
 };
