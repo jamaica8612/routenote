@@ -99,6 +99,23 @@ export default function MapContainer({
     const map = new window.naver.maps.Map(mapRef.current, mapOptions);
     setMapInstance(map);
 
+    // Try to get user current location for initial center
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const currentLatLng = new window.naver.maps.LatLng(
+            position.coords.latitude,
+            position.coords.longitude
+          );
+          map.setCenter(currentLatLng);
+        },
+        (error) => {
+          console.warn('Geolocation initial center failed: ', error.message);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+
     // Map Click / Long Press Handling
     window.naver.maps.Event.addListener(map, 'click', (e) => {
       const lat = e.coord.lat();
@@ -237,11 +254,11 @@ export default function MapContainer({
       const renderLabel = (lat, lng, text) => {
         const labelContent = `
           <div style="
-            color: #334155; /* Slate 700 (clean, professional dark slate) */
-            font-weight: 600;
-            font-size: 13px;
+            color: #1E293B; /* Slate 800 (darker slate for higher contrast) */
+            font-weight: 700;
+            font-size: 16px; /* Increased font size */
             white-space: nowrap;
-            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; /* Thin white blur glow for visibility */
+            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3.5px #fff; /* White blur glow for visibility */
             user-select: none;
             pointer-events: none;
             transform: translate(-50%, -50%);
@@ -265,6 +282,7 @@ export default function MapContainer({
 
       // Draw Zone Centroid Text Label for each polygon element
       if (geom.type === 'MultiPolygon') {
+        const isMulti = geom.coordinates.length > 1;
         geom.coordinates.forEach((coordsGroup, polyIdx) => {
           const singleGeom = {
             type: 'Polygon',
@@ -272,7 +290,8 @@ export default function MapContainer({
           };
           const centroid = getPolygonCentroid(singleGeom);
           if (centroid) {
-            const labelText = (geom.subLabels && geom.subLabels[polyIdx]) || zone.name;
+            const baseText = (geom.subLabels && geom.subLabels[polyIdx]) || zone.name;
+            const labelText = isMulti ? `${polyIdx + 1}. ${baseText}` : baseText;
             renderLabel(centroid.lat, centroid.lng, labelText);
           }
         });
@@ -334,15 +353,11 @@ export default function MapContainer({
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
-          background-color: ${background};
-          border: ${borderStyle};
-          border-radius: 50%;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-          font-size: 20px;
+          font-size: 28px; /* Slightly larger emoji size since we removed borders */
           opacity: ${opacity};
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); /* Soft shadow for readability */
           transition: all 0.2s;
+          cursor: pointer;
         ">
           ${markerTypeObj.emoji}
         </div>
@@ -354,7 +369,7 @@ export default function MapContainer({
         title: tip.title,
         icon: {
           content: markerContent,
-          anchor: new window.naver.maps.Point(18, 18),
+          anchor: new window.naver.maps.Point(14, 14), // Center anchor for 28px content
         },
       });
 

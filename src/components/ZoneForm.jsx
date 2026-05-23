@@ -23,7 +23,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
   // Sorted zones coordinates & sub-label text states
   const [sortedZonesData, setSortedZonesData] = useState([]);
 
-  // Extract loops and match with subLabels, sorting by centroid longitude (left-to-right)
+  // Extract loops and match with subLabels, preserving original drawing sequence mapping (matching map index 1, 2...)
   const getSortedLoopsAndLabels = () => {
     let loops = [];
     let initialLabels = [];
@@ -44,13 +44,8 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       loops = polygonCoords.filter(loop => loop.length >= 3);
     }
 
-    // Map each loop with its centroid longitude
-    const loopsWithCentroid = loops.map((loop, idx) => {
-      let lats = loop.map(p => p.lat);
-      let lngs = loop.map(p => p.lng);
-      let centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
-      let centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-
+    // Map each loop strictly preserving coordinates array order to match map labels 1, 2, 3...
+    return loops.map((loop, idx) => {
       let label = '';
       if (zone) {
         label = initialLabels[idx] || '';
@@ -58,17 +53,10 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
       
       return {
         loop,
-        centroidLng,
-        centroidLat,
         originalIndex: idx,
         label: label
       };
     });
-
-    // Sort by longitude (min to max, meaning left to right)
-    loopsWithCentroid.sort((a, b) => a.centroidLng - b.centroidLng);
-
-    return loopsWithCentroid;
   };
 
   useEffect(() => {
@@ -184,7 +172,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
           id="zone-name"
           type="text"
           className="input-field"
-          placeholder="예) 319ABCD, 장전래미안, 313BC"
+          placeholder="예) 장전래미안, 온천삼거리구역"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -196,22 +184,16 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
           <label className="input-label">구역 내 각 영역별 표시 텍스트</label>
           <div style={styles.subLabelsList}>
             {sortedZonesData.map((d, index) => {
-              let directionHint = '';
-              if (sortedZonesData.length > 1) {
-                if (index === 0) directionHint = ' (가장 왼쪽)';
-                else if (index === sortedZonesData.length - 1) directionHint = ' (가장 오른쪽)';
-                else directionHint = ` (중간 영역 ${index + 1})`;
-              }
               return (
                 <div key={index} style={styles.subLabelItem}>
                   <span style={styles.subLabelHint}>
-                    영역 {index + 1}{directionHint}
+                    영역 {index + 1} (지도 상의 {index + 1}번 덩어리)
                   </span>
                   <input
                     type="text"
                     className="input-field"
                     style={{ marginTop: '4px' }}
-                    placeholder={`예) 319C02 등 표시 이름 입력 (미기입시 "${name || '구역명'}")`}
+                    placeholder={`예) A동, 101동 등 개별 명칭 입력 (미기입시 "${name || '구역명'}")`}
                     value={d.label}
                     onChange={(e) => handleSubLabelChange(index, e.target.value)}
                   />
