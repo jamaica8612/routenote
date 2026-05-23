@@ -46,6 +46,17 @@ export default function MapContainer({
   const [drawingPolylines, setDrawingPolylines] = useState([]);
   const [drawingMarkers, setDrawingMarkers] = useState([]);
 
+  // Refs to prevent map recreation when click handler dependencies change
+  const isDrawingZoneRef = useRef(isDrawingZone);
+  const isDrawingPathRef = useRef(isDrawingPath);
+  const onMapClickRef = useRef(onMapClick);
+
+  useEffect(() => {
+    isDrawingZoneRef.current = isDrawingZone;
+    isDrawingPathRef.current = isDrawingPath;
+    onMapClickRef.current = onMapClick;
+  }, [isDrawingZone, isDrawingPath, onMapClick]);
+
   // Dynamically load Naver Maps JavaScript API at runtime
   useEffect(() => {
     const clientId = import.meta.env.VITE_NAVER_MAP_CLIENT_ID;
@@ -116,13 +127,13 @@ export default function MapContainer({
       );
     }
 
-    // Map Click / Long Press Handling
+    // Map Click / Long Press Handling using refs to prevent recreating map
     window.naver.maps.Event.addListener(map, 'click', (e) => {
       const lat = e.coord.lat();
       const lng = e.coord.lng();
 
-      if (!isDrawingZone && !isDrawingPath) {
-        onMapClick(lat, lng);
+      if (!isDrawingZoneRef.current && !isDrawingPathRef.current) {
+        onMapClickRef.current(lat, lng);
       } else {
         setDrawCoords(prev => {
           const next = [...prev];
@@ -136,15 +147,15 @@ export default function MapContainer({
     });
 
     window.naver.maps.Event.addListener(map, 'longpress', (e) => {
-      if (!isDrawingZone && !isDrawingPath) {
-        onMapClick(e.coord.lat(), e.coord.lng());
+      if (!isDrawingZoneRef.current && !isDrawingPathRef.current) {
+        onMapClickRef.current(e.coord.lat(), e.coord.lng());
       }
     });
 
     return () => {
       window.naver.maps.Event.clearInstanceListeners(map);
     };
-  }, [scriptLoaded, isDrawingZone, isDrawingPath]);
+  }, [scriptLoaded]);
 
   // Handle zooming/panning to search result
   useEffect(() => {
@@ -282,7 +293,6 @@ export default function MapContainer({
 
       // Draw Zone Centroid Text Label for each polygon element
       if (geom.type === 'MultiPolygon') {
-        const isMulti = geom.coordinates.length > 1;
         geom.coordinates.forEach((coordsGroup, polyIdx) => {
           const singleGeom = {
             type: 'Polygon',
@@ -290,8 +300,7 @@ export default function MapContainer({
           };
           const centroid = getPolygonCentroid(singleGeom);
           if (centroid) {
-            const baseText = (geom.subLabels && geom.subLabels[polyIdx]) || zone.name;
-            const labelText = isMulti ? `${polyIdx + 1}. ${baseText}` : baseText;
+            const labelText = (geom.subLabels && geom.subLabels[polyIdx]) || zone.name;
             renderLabel(centroid.lat, centroid.lng, labelText);
           }
         });
