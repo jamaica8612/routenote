@@ -176,6 +176,9 @@ export default function MapContainer({
       zonesToShow = zones.filter(zone => zone.id === activeZoneId || zone.id === sheetZoneId);
     }
 
+    // Disable polygon click actions if drawing mode is active, letting clicks pass through to map
+    const shouldBeClickable = !isDrawingZone && !isDrawingPath;
+
     zonesToShow.forEach(zone => {
       if (zone.is_deleted || !zone.polygon) return;
 
@@ -196,12 +199,14 @@ export default function MapContainer({
             strokeColor: zone.color || '#6366F1',
             strokeOpacity: 0.8,
             strokeWeight: 2,
-            clickable: true,
+            clickable: shouldBeClickable, // Block clicks only when not drawing
           });
 
-          window.naver.maps.Event.addListener(polygon, 'click', () => {
-            onZoneClick(zone);
-          });
+          if (shouldBeClickable) {
+            window.naver.maps.Event.addListener(polygon, 'click', () => {
+              onZoneClick(zone);
+            });
+          }
           newPolygons.push(polygon);
         });
       } else if (geom.type === 'Polygon') {
@@ -217,12 +222,14 @@ export default function MapContainer({
           strokeColor: zone.color || '#6366F1',
           strokeOpacity: 0.8,
           strokeWeight: 2,
-          clickable: true,
+          clickable: shouldBeClickable, // Block clicks only when not drawing
         });
 
-        window.naver.maps.Event.addListener(polygon, 'click', () => {
-          onZoneClick(zone);
-        });
+        if (shouldBeClickable) {
+          window.naver.maps.Event.addListener(polygon, 'click', () => {
+            onZoneClick(zone);
+          });
+        }
         newPolygons.push(polygon);
       }
 
@@ -260,7 +267,7 @@ export default function MapContainer({
 
     setPolygons(newPolygons);
     setZoneLabels(newLabels);
-  }, [zones, mapInstance, selectedResult, selectedZone]); // Triggered on search/focus changes
+  }, [zones, mapInstance, selectedResult, selectedZone, isDrawingZone, isDrawingPath]); // Trigger when drawing states change
 
   // Render Route Tips (Markers with age calculation)
   useEffect(() => {
