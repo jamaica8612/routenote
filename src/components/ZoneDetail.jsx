@@ -295,7 +295,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
                         style={styles.img} 
                         onClick={() => setExpandedPhotoUrl(p.storage_path)}
                       />
-                      {currentUser && currentUser.role !== 'viewer' && (
+                      {currentUser && currentUser.role === 'admin' && (
                         <button
                           type="button"
                           style={styles.photoDeleteBadge}
@@ -310,7 +310,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
                       )}
                     </div>
                   ))}
-                  {currentUser && currentUser.role !== 'viewer' && (
+                  {currentUser && currentUser.role === 'admin' && (
                     <div style={styles.photoUploadCard} onClick={() => fileInputRef.current?.click()}>
                       <Plus size={20} color="var(--text-secondary)" />
                       <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>추가</span>
@@ -321,7 +321,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
             );
           } else {
             return (
-              currentUser && currentUser.role !== 'viewer' && (
+              currentUser && currentUser.role === 'admin' && (
                 <div style={styles.imagePlaceholderBtn} onClick={() => fileInputRef.current?.click()}>
                   <Camera size={24} color="var(--text-secondary)" />
                   <span style={styles.imagePlaceholderText}>
@@ -350,8 +350,8 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         </div>
       )}
 
-      {/* Zone Memo (For Guest Viewer - Read Only) */}
-      {currentUser?.role === 'viewer' && zone.memo && (
+      {/* Zone Memo (For Driver/Guest - Read Only) */}
+      {currentUser?.role !== 'admin' && zone.memo && (
         <div style={{ ...styles.memoBox, cursor: 'pointer' }} onClick={() => setIsMemoExpanded(!isMemoExpanded)} title="클릭 시 전체 보기/접기">
           <FileText size={16} color="var(--text-secondary)" style={{ marginTop: '2px', flexShrink: 0 }} />
           <p style={{
@@ -366,8 +366,8 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         </div>
       )}
 
-      {/* Zone Memo (For Driver/Admin - Editable) */}
-      {currentUser && currentUser.role !== 'viewer' && (
+      {/* Zone Memo (For Admin - Editable) */}
+      {currentUser && currentUser.role === 'admin' && (
         <div style={styles.memoSection}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>구역 전체 배송팁 메모</h3>

@@ -189,6 +189,22 @@ export default function App() {
     setSheetOpen(true);
   };
 
+  const handleZoneClick = (zone, lat = null, lng = null) => {
+    if (!lat || !lng || currentUser?.role === 'viewer') {
+      openZoneDetail(zone, lat, lng);
+      return;
+    }
+
+    setClickLat(lat);
+    setClickLng(lng);
+    setSelectedTip(null);
+    setSelectedZone(zone);
+
+    setSheetTitle('팁 보기 / 팁 등록하기');
+    setSheetContent('map-click-menu');
+    setSheetOpen(true);
+  };
+
   // GPS Current Location Tip Register
   const handleCurrentLocationRegister = () => {
     if (!navigator.geolocation) {
@@ -470,7 +486,7 @@ export default function App() {
         currentUser={currentUser}
         onMapClick={handleMapClick}
         onMarkerClick={openTipDetail}
-        onZoneClick={openZoneDetail}
+        onZoneClick={handleZoneClick}
         isDrawingZone={isDrawingZone}
         setIsDrawingZone={setIsDrawingZone}
         isDrawingPath={isDrawingPath}
