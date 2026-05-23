@@ -50,8 +50,8 @@ serve(async (req) => {
     const postcode = url.searchParams.get("postcode")?.trim() || "";
 
     if (!/^\d{5}$/.test(postcode)) {
-      return new Response(JSON.stringify({ error: "올바른 5자리 우편번호를 입력해주세요." }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: "postcode must be a 5-digit string." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -72,8 +72,8 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      return new Response(JSON.stringify({ error: `행정망 우편번호 조회에 실패했습니다. (상태 코드: ${response.status})` }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: `Juso lookup failed with ${response.status}.` }), {
+        status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -82,8 +82,8 @@ serve(async (req) => {
     const item = payload?.results?.content?.[0];
 
     if (!item?.geom) {
-      return new Response(JSON.stringify({ error: "해당 우편번호의 구역 경계 데이터를 찾을 수 없습니다." }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: "No postcode boundary found." }), {
+        status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -106,8 +106,8 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    return new Response(JSON.stringify({ error: `서버 에러가 발생했습니다: ${error.message}` }), {
-      status: 200,
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
