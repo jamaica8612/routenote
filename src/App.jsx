@@ -9,7 +9,7 @@ import TipDetail from './components/TipDetail';
 import ZoneForm from './components/ZoneForm';
 import ZoneDetail from './components/ZoneDetail';
 import PathForm from './components/PathForm';
-import { Compass, LogOut, Plus, MapPin } from 'lucide-react';
+import { Compass, LogOut, Plus, MapPin, Locate } from 'lucide-react';
 import { getDbUserId } from './utils/userUtils';
 
 export default function App() {
@@ -452,7 +452,7 @@ export default function App() {
           title="현재 위치로 지도 이동"
           style={styles.floatingCompassBtn(currentUser?.role === 'admin')}
         >
-          <Compass size={20} color="#FFFFFF" />
+          <Locate size={18} color="#FFFFFF" />
         </button>
       )}
 
@@ -501,15 +501,15 @@ const styles = {
     bottom: '40px',
     left: isAdmin ? '16px' : 'auto',
     right: isAdmin ? 'auto' : '16px',
-    width: '54px',
-    height: '54px',
+    width: '44px',
+    height: '44px',
     borderRadius: '50%',
     boxShadow: 'var(--shadow-md)',
     zIndex: 850,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)', // Black semi-transparent
+    backgroundColor: 'rgba(15, 23, 42, 0.45)', // More transparent (0.45)
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
