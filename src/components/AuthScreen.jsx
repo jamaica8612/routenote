@@ -45,7 +45,7 @@ export default function AuthScreen({ onDemoLogin }) {
       <div style={styles.backgroundGlow1}></div>
       <div style={styles.backgroundGlow2}></div>
 
-      <div className="glass" style={styles.loginCard}>
+      <div style={styles.loginCard}>
         {/* Logo and App Title */}
         <div style={styles.logoContainer} onClick={handleLogoClick}>
           <div style={styles.logoIcon}>
@@ -181,6 +181,10 @@ const styles = {
     textAlign: 'center',
     zIndex: 1,
     boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+    background: 'rgba(22, 28, 45, 0.7)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
   },
   logoContainer: {
     marginBottom: '32px',
@@ -257,9 +261,9 @@ const styles = {
     borderRadius: '14px',
     padding: '16px',
     height: '52px',
-    backgroundColor: 'var(--bg-input)',
-    border: '1.5px solid var(--bg-card-border)',
-    color: 'var(--text-primary)',
+    backgroundColor: '#121824',
+    border: '1.5px solid rgba(255, 255, 255, 0.08)',
+    color: '#F3F4F6',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -302,5 +306,8 @@ const styles = {
     minHeight: '40px',
     borderRadius: '10px',
     fontWeight: '500',
+    backgroundColor: '#121824',
+    color: '#F3F4F6',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
   },
 };
