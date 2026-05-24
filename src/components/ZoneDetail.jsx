@@ -509,7 +509,10 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
                      t.marker_type === 'warning' ? '⚠️' :
                      t.marker_type === 'access_code' ? '🔑' : '⭐'}
                   </span>
-                  <div style={styles.tipName}>{t.title}</div>
+                  <div style={styles.tipText}>
+                    <div style={styles.tipName}>{t.title}</div>
+                    {t.memo && <div style={styles.tipMemo}>{t.memo}</div>}
+                  </div>
                 </div>
                 <ChevronRight size={16} color="var(--text-muted)" />
               </button>
@@ -694,14 +697,32 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    minWidth: 0,
+    flex: 1,
   },
   tipEmoji: {
     fontSize: '16px',
+    flexShrink: 0,
+  },
+  tipText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+    minWidth: 0,
   },
   tipName: {
     fontSize: '13px',
     color: 'var(--text-primary)',
     fontWeight: '500',
+  },
+  tipMemo: {
+    fontSize: '12px',
+    color: 'var(--text-secondary)',
+    lineHeight: '1.35',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
   },
   photoContainer: {
     display: 'flex',

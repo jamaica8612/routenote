@@ -1,46 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Compass, Locate, LogOut, MapPin, Plus } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
-import MapContainer from './components/MapContainer';
-import SearchBox from './components/SearchBox';
 import BottomSheet from './components/BottomSheet';
-import TipForm from './components/TipForm';
-import TipDetail from './components/TipDetail';
-import ZoneForm from './components/ZoneForm';
-import ZoneDetail from './components/ZoneDetail';
+import MapContainer from './components/MapContainer';
 import PathForm from './components/PathForm';
-import { Compass, LogOut, Plus, MapPin, Locate } from 'lucide-react';
-import { getDbUserId } from './utils/userUtils';
+import RoadviewModal from './components/RoadviewModal';
+import SearchBox from './components/SearchBox';
+import TipDetail from './components/TipDetail';
+import TipForm from './components/TipForm';
+import ZoneDetail from './components/ZoneDetail';
+import ZoneForm from './components/ZoneForm';
 import { isPointInPolygon } from './utils/geoUtils';
+import { getDbUserId } from './utils/userUtils';
 
 export default function App() {
-  // Authentication States
   const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Map Global Data States
   const [zones, setZones] = useState([]);
   const [tips, setTips] = useState([]);
   const [selectedResult, setSelectedResult] = useState(null);
 
-  // Drawing States (For Admins)
   const [isDrawingZone, setIsDrawingZone] = useState(false);
   const [isDrawingPath, setIsDrawingPath] = useState(false);
   const [drawCoords, setDrawCoords] = useState([]);
   const [drawingZoneId, setDrawingZoneId] = useState(null);
   const [activePathId, setActivePathId] = useState(null);
 
-  // Bottom Sheet Control States
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetTitle, setSheetTitle] = useState('');
-  const [sheetContent, setSheetContent] = useState(null); // 'tip-detail' | 'tip-form' | 'zone-detail' | 'zone-form' | 'path-form'
+  const [sheetContent, setSheetContent] = useState(null);
   const [selectedTip, setSelectedTip] = useState(null);
   const [selectedZone, setSelectedZone] = useState(null);
   const [clickLat, setClickLat] = useState(null);
   const [clickLng, setClickLng] = useState(null);
+  const [trackLocationTrigger, setTrackLocationTrigger] = useState(0);
+  const [activeRoadviewCoords, setActiveRoadviewCoords] = useState(null);
 
-  // Listen to Auth State
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -64,21 +62,26 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (currentUser) {
+      fetchData();
+    }
+  }, [currentUser]);
+
   const fetchUserProfile = async (authUser) => {
     try {
       const { data, error } = await supabase
-        .from('rn_profiles') // [Prefix Update] profiles -> rn_profiles
+        .from('rn_profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
 
       if (error) {
-        // Fallback profile if record is still being created by trigger
         setCurrentUser({
           id: authUser.id,
           email: authUser.email,
           name: authUser.user_metadata.name || authUser.email.split('@')[0],
-          role: 'member', // default role
+          role: 'member',
         });
       } else {
         setCurrentUser(data);
@@ -90,26 +93,17 @@ export default function App() {
     }
   };
 
-  // Sync Data when logged in
-  useEffect(() => {
-    if (currentUser) {
-      fetchData();
-    }
-  }, [currentUser]);
-
   const fetchData = async () => {
     try {
-      // Fetch Zones
       const { data: zoneData, error: zoneError } = await supabase
-        .from('rn_route_zones') // [Prefix Update] route_zones -> rn_route_zones
+        .from('rn_route_zones')
         .select('*')
         .eq('is_deleted', false);
       if (zoneError) throw zoneError;
       setZones(zoneData || []);
 
-      // Fetch Tips
       const { data: tipData, error: tipError } = await supabase
-        .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
+        .from('rn_route_tips')
         .select('*')
         .eq('is_deleted', false);
       if (tipError) throw tipError;
@@ -119,7 +113,6 @@ export default function App() {
     }
   };
 
-  // Handle Demo Login Bypass
   const handleDemoLogin = (demoProfile) => {
     setSession({ user: { id: demoProfile.id, email: demoProfile.email } });
     setCurrentUser(demoProfile);
@@ -128,17 +121,17 @@ export default function App() {
 
   const handleLogout = async () => {
     if (currentUser.id.startsWith('demo-')) {
-      // Bypass Supabase if demo session
       setSession(null);
       setCurrentUser(null);
       return;
     }
+
     await supabase.auth.signOut();
   };
 
-  // Bottom Sheet content management
   const openTipDetail = (tip) => {
     setSelectedTip(tip);
+    setSelectedZone(zones.find(zone => zone.id === tip.zone_id) || null);
     setSheetTitle('배송팁 세부 정보');
     setSheetContent('tip-detail');
     setSheetOpen(true);
@@ -146,37 +139,15 @@ export default function App() {
 
   const openTipForm = (lat, lng, tip = null) => {
     if (currentUser?.role === 'viewer') {
-      alert('둘러보기 모드에서는 배송팁을 등록/수정할 수 없습니다.');
+      alert('둘러보기 모드에서는 배송팁을 등록하거나 수정할 수 없습니다.');
       return;
     }
+
     setSelectedTip(tip);
     setClickLat(lat);
     setClickLng(lng);
     setSheetTitle(tip ? '배송팁 수정하기' : '새로운 배송팁 등록');
     setSheetContent('tip-form');
-    setSheetOpen(true);
-  };
-
-  const handleMapClick = (lat, lng) => {
-    const matchedZone = zones.find(z => !z.is_deleted && isPointInPolygon(lat, lng, z.polygon));
-    
-    // If viewer (guest) and not inside any zone, do nothing
-    if (currentUser?.role === 'viewer' && !matchedZone) {
-      return;
-    }
-
-    setClickLat(lat);
-    setClickLng(lng);
-    setSelectedTip(null);
-    
-    if (currentUser?.role === 'viewer') {
-      // If guest and inside a zone, go straight to zone details
-      openZoneDetail(matchedZone, lat, lng);
-      return;
-    }
-
-    setSheetTitle('팁 보기 / 팁 등록하기');
-    setSheetContent('map-click-menu');
     setSheetOpen(true);
   };
 
@@ -186,6 +157,27 @@ export default function App() {
     setClickLng(lng);
     setSheetTitle('구역 세부 정보');
     setSheetContent('zone-detail');
+    setSheetOpen(true);
+  };
+
+  const handleMapClick = (lat, lng) => {
+    const matchedZone = zones.find(zone => !zone.is_deleted && isPointInPolygon(lat, lng, zone.polygon));
+
+    if (currentUser?.role === 'viewer' && !matchedZone) {
+      return;
+    }
+
+    setClickLat(lat);
+    setClickLng(lng);
+    setSelectedTip(null);
+
+    if (currentUser?.role === 'viewer') {
+      openZoneDetail(matchedZone, lat, lng);
+      return;
+    }
+
+    setSheetTitle('팁 보기 / 팁 등록하기');
+    setSheetContent('map-click-menu');
     setSheetOpen(true);
   };
 
@@ -199,59 +191,47 @@ export default function App() {
     setClickLng(lng);
     setSelectedTip(null);
     setSelectedZone(zone);
-
     setSheetTitle('팁 보기 / 팁 등록하기');
     setSheetContent('map-click-menu');
     setSheetOpen(true);
   };
 
-  // GPS Current Location Tip Register
-  const handleCurrentLocationRegister = () => {
-    if (!navigator.geolocation) {
-      alert('이 브라우저는 GPS 위치 조회를 지원하지 않습니다.');
+  const handleSelectResult = (item) => {
+    setSelectedResult(item);
+
+    if (item.type === 'zone') {
+      setSelectedZone(item.data);
+      setSelectedTip(null);
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        // Open Form on GPS coordinates
-        openTipForm(latitude, longitude);
-      },
-      (error) => {
-        alert('GPS 위치를 획득할 수 없습니다: ' + error.message);
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+    if (item.type === 'tip') {
+      setSelectedTip(item.data);
+      setSelectedZone(zones.find(zone => zone.id === item.data.zone_id) || null);
+      return;
+    }
+
+    if (item.type === 'address') {
+      const matchedZone = zones.find(zone =>
+        !zone.is_deleted && isPointInPolygon(item.data.lat, item.data.lng, zone.polygon)
+      );
+      setSelectedZone(matchedZone || null);
+      setSelectedTip(null);
+      return;
+    }
+
+    setSelectedZone(null);
+    setSelectedTip(null);
   };
 
-  // Move Map to Current GPS Location
   const handleMoveToCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      alert('이 브라우저는 GPS 위치 조회를 지원하지 않습니다.');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setSelectedResult({
-          type: 'address',
-          data: {
-            lat: latitude,
-            lng: longitude,
-            name: '현재 위치'
-          }
-        });
-      },
-      (error) => {
-        alert('현재 위치를 가져올 수 없습니다: ' + error.message);
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+    setTrackLocationTrigger(prev => prev + 1);
   };
 
-  // Render content dynamically inside sliding BottomSheet
+  const handleOpenRoadview = (lat, lng) => {
+    setActiveRoadviewCoords({ lat, lng });
+  };
+
   const renderSheetContent = () => {
     switch (sheetContent) {
       case 'tip-detail':
@@ -259,11 +239,12 @@ export default function App() {
           <TipDetail
             tip={selectedTip}
             currentUser={currentUser}
-            onEdit={(t) => openTipForm(t.lat, t.lng, t)}
+            onOpenRoadview={handleOpenRoadview}
+            onEdit={(tip) => openTipForm(tip.lat, tip.lng, tip)}
             onDelete={async (tipId) => {
               try {
                 const { error } = await supabase
-                  .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
+                  .from('rn_route_tips')
                   .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', tipId);
                 if (error) throw error;
@@ -274,8 +255,11 @@ export default function App() {
               }
             }}
             onVerified={(time, verifierId) => {
-              // Update local state without fetching again to prevent map flicker
-              setTips(prev => prev.map(t => t.id === selectedTip.id ? { ...t, last_verified_at: time, last_verified_by: verifierId } : t));
+              setTips(prev => prev.map(tip => (
+                tip.id === selectedTip.id
+                  ? { ...tip, last_verified_at: time, last_verified_by: verifierId }
+                  : tip
+              )));
               setSelectedTip(prev => ({ ...prev, last_verified_at: time, last_verified_by: verifierId }));
             }}
           />
@@ -303,17 +287,15 @@ export default function App() {
             tips={tips}
             clickLat={clickLat}
             clickLng={clickLng}
-            onAddTipAtClick={(lat, lng) => {
-              openTipForm(lat, lng);
-            }}
-            onEdit={(z) => {
+            onAddTipAtClick={(lat, lng) => openTipForm(lat, lng)}
+            onEdit={() => {
               setSheetTitle('구역 정보 수정');
               setSheetContent('zone-form');
             }}
             onDelete={async (zoneId) => {
               try {
                 const { error } = await supabase
-                  .from('rn_route_zones') // [Prefix Update] route_zones -> rn_route_zones
+                  .from('rn_route_zones')
                   .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', zoneId);
                 if (error) throw error;
@@ -327,13 +309,12 @@ export default function App() {
               setDrawingZoneId(zoneId);
               setIsDrawingPath(true);
               setDrawCoords([]);
-              setSheetOpen(false); // Close Bottom Sheet so admin can draw on map
+              setSheetOpen(false);
             }}
             onSelectPath={(pathId) => {
               if (typeof pathId === 'object' && pathId !== null) {
-                // If clicked a tip link within zone list
                 setSheetOpen(false);
-                setSelectedResult({ type: 'tip', data: pathId });
+                handleSelectResult({ type: 'tip', data: pathId });
               } else {
                 setActivePathId(pathId);
               }
@@ -343,10 +324,13 @@ export default function App() {
           />
         );
       case 'map-click-menu': {
-        const matchedZone = zones.find(z => !z.is_deleted && isPointInPolygon(clickLat, clickLng, z.polygon));
+        const matchedZone = zones.find(zone => !zone.is_deleted && isPointInPolygon(clickLat, clickLng, zone.polygon));
+
         return (
           <div style={styles.menuContainer}>
-            <p style={styles.menuText}>선택한 위치: {matchedZone ? `[${matchedZone.name}] 구역 내부` : '구역 바깥 영역'}</p>
+            <p style={styles.menuText}>
+              선택한 위치: {matchedZone ? `[${matchedZone.name}] 구역 내부` : '구역 바깥 영역'}
+            </p>
             <div style={styles.menuButtons}>
               {matchedZone && (
                 <button
@@ -362,7 +346,7 @@ export default function App() {
 
               <button
                 type="button"
-                className={matchedZone ? "btn btn-secondary" : "btn btn-primary"}
+                className={matchedZone ? 'btn btn-secondary' : 'btn btn-primary'}
                 style={styles.menuBtn}
                 onClick={() => {
                   setSheetTitle('새로운 배송팁 등록');
@@ -394,8 +378,7 @@ export default function App() {
             onSave={(savedZone) => {
               fetchData();
               if (savedZone) {
-                setSelectedResult({ type: 'zone', data: savedZone });
-                setSelectedZone(savedZone);
+                handleSelectResult({ type: 'zone', data: savedZone });
               }
               setSheetOpen(false);
               setIsDrawingZone(false);
@@ -438,12 +421,11 @@ export default function App() {
     }
   };
 
-  // Rendering Loader screen
   if (authLoading) {
     return (
       <div style={styles.loaderContainer}>
         <Compass size={48} className="spin-icon" color="var(--primary)" />
-        <p style={{ marginTop: '16px', color: 'var(--text-secondary)', fontWeight: '600' }}>구역노트 데이터 불러오는 중...</p>
+        <p style={styles.loaderText}>구역노트 데이터 불러오는 중...</p>
         <style>{`
           .spin-icon {
             animation: spin 2s linear infinite;
@@ -457,36 +439,40 @@ export default function App() {
     );
   }
 
-  // Display Login screen if unauthorized
   if (!currentUser) {
     return <AuthScreen onDemoLogin={handleDemoLogin} />;
   }
 
-  // Filter tips to display: only show tips of the active zone when bottom sheet is open
-  const activeZoneId = sheetOpen ? (selectedZone?.id || selectedTip?.zone_id) : null;
-  const filteredTips = activeZoneId ? tips.filter(t => t.zone_id === activeZoneId) : [];
+  const visibleZoneIds = new Set([
+    selectedResult?.type === 'zone' ? selectedResult.data.id : null,
+    selectedZone?.id || null,
+    selectedTip?.zone_id || null,
+  ].filter(Boolean));
+
+  const visibleTips = visibleZoneIds.size > 0
+    ? tips.filter(tip => visibleZoneIds.has(tip.zone_id))
+    : [];
 
   return (
     <div className="app-container">
-      {/* 1. UPPER FIXED SEARCH BOX */}
       {!isDrawingZone && !isDrawingPath && (
         <SearchBox
-          onSelectResult={(item) => setSelectedResult(item)}
+          onSelectResult={handleSelectResult}
           zones={zones}
           tips={tips}
         />
       )}
 
-      {/* 2. BACKGROUND MAP DISPLAY */}
       <MapContainer
         zones={zones}
-        tips={filteredTips}
-        paths={[]} // not needed dynamically
+        tips={visibleTips}
+        paths={[]}
         selectedResult={selectedResult}
         currentUser={currentUser}
         onMapClick={handleMapClick}
         onMarkerClick={openTipDetail}
         onZoneClick={handleZoneClick}
+        onOpenRoadview={handleOpenRoadview}
         isDrawingZone={isDrawingZone}
         setIsDrawingZone={setIsDrawingZone}
         isDrawingPath={isDrawingPath}
@@ -495,7 +481,8 @@ export default function App() {
         setActivePathId={setActivePathId}
         drawCoords={drawCoords}
         setDrawCoords={setDrawCoords}
-        selectedZone={selectedZone} // [New Prop] Pass currently open zone detail
+        selectedZone={selectedZone}
+        trackLocationTrigger={trackLocationTrigger}
         onCreateZone={() => {
           setSelectedZone(null);
           setDrawCoords([]);
@@ -516,7 +503,6 @@ export default function App() {
         }}
       />
 
-      {/* 3. UPPER LOGOUT UTILITY */}
       {!isDrawingZone && !isDrawingPath && (
         <button
           className="btn btn-icon"
@@ -528,7 +514,6 @@ export default function App() {
         </button>
       )}
 
-      {/* 3.5. FLOATING COMPASS BUTTON */}
       {!isDrawingZone && !isDrawingPath && (
         <button
           className="btn btn-icon"
@@ -540,7 +525,6 @@ export default function App() {
         </button>
       )}
 
-      {/* 4. MODAL SLIDE BOTTOM SHEET */}
       <BottomSheet
         isOpen={sheetOpen}
         onClose={() => setSheetOpen(false)}
@@ -548,6 +532,14 @@ export default function App() {
       >
         {renderSheetContent()}
       </BottomSheet>
+
+      {activeRoadviewCoords && (
+        <RoadviewModal
+          lat={activeRoadviewCoords.lat}
+          lng={activeRoadviewCoords.lng}
+          onClose={() => setActiveRoadviewCoords(null)}
+        />
+      )}
     </div>
   );
 }
@@ -562,6 +554,11 @@ const styles = {
     height: '100%',
     backgroundColor: '#0B0F19',
   },
+  loaderText: {
+    marginTop: '16px',
+    color: 'var(--text-secondary)',
+    fontWeight: '600',
+  },
   headerLogoutBtn: {
     position: 'absolute',
     top: '16px',
@@ -574,7 +571,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)', // Black semi-transparent
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -593,7 +590,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)', // More transparent (0.45)
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     border: '1px solid rgba(255, 255, 255, 0.1)',

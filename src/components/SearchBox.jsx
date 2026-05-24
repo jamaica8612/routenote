@@ -1,127 +1,151 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
-import { Search, MapPin, Map, Landmark, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Landmark, Map, MapPin, Search, X } from 'lucide-react';
+
+const MARKER_TYPE_LABELS = {
+  vehicle_entrance: '차량 진입구',
+  parking: '정차/주차',
+  entrance: '출입구/공동현관',
+  elevator: '엘리베이터',
+  delivery_spot: '배송 위치',
+  warning: '주의',
+  access_code: '비번/호출',
+  important: '중요',
+};
+
+const RESULT_META = {
+  zone: { label: '구역', color: '#6366F1', icon: <Map size={16} color="#6366F1" /> },
+  tip: { label: '팁', color: '#10B981', icon: <MapPin size={16} color="#10B981" /> },
+  address: { label: '주소', color: '#F59E0B', icon: <Landmark size={16} color="#F59E0B" /> },
+};
 
 export default function SearchBox({ onSelectResult, zones, tips }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const searchRef = useRef(null);
 
-  // Close search results when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSearch = async (val) => {
-    setQuery(val);
-    if (!val.trim()) {
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery) {
       setResults([]);
+      setSearchError('');
       setIsOpen(false);
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
     setIsOpen(true);
+    setLoading(true);
+    setSearchError('');
 
-    try {
-      const searchResults = [];
-      const lowerVal = val.toLowerCase().trim();
+    const timeoutId = window.setTimeout(async () => {
+      const lowerQuery = trimmedQuery.toLowerCase();
 
-      const matchedZones = zones
-        .filter(z => {
-          if (z.is_deleted) return false;
-          const matchesName = z.name.toLowerCase().includes(lowerVal);
-          const matchesSubLabel = z.polygon && z.polygon.subLabels && z.polygon.subLabels.some(
-            sl => sl.toLowerCase().includes(lowerVal)
-          );
-          return matchesName || matchesSubLabel;
-        })
-        .map(z => ({
-          type: 'zone',
-          id: z.id,
-          title: z.name,
-          subtitle: z.polygon && z.polygon.subLabels ? `${z.polygon.subLabels.join(', ')} | ${z.memo || ''}` : (z.memo || '배송 구역'),
-          icon: <Map size={16} color="#6366F1" />,
-          data: z,
-        }));
-      searchResults.push(...matchedZones);
-
-      // 2. Search Local Tips (Priority 2)
-      const matchedTips = tips
-        .filter(t => {
-          if (t.is_deleted) return false;
-          const matchesTitle = t.title.toLowerCase().includes(lowerVal);
-          const matchesMemo = t.memo && t.memo.toLowerCase().includes(lowerVal);
-          const matchesTags = t.tags && t.tags.some(tag => tag.toLowerCase().includes(lowerVal));
-          return matchesTitle || matchesMemo || matchesTags;
-        })
-        .map(t => {
-          const zone = zones.find(z => z.id === t.zone_id);
-          const zonePrefix = zone ? `[${zone.name}] ` : '';
-          
-          const markerTypeLabels = {
-            vehicle_entrance: '차량 진입구',
-            parking: '정차/주차',
-            entrance: '출입구/공동현관',
-            elevator: '엘리베이터',
-            delivery_spot: '배송 위치',
-            warning: '주의',
-            access_code: '비번/호출',
-            important: '중요'
-          };
-          const typeLabel = markerTypeLabels[t.marker_type] || t.marker_type;
-
-          return {
-            type: 'tip',
-            id: t.id,
-            title: t.title,
-            subtitle: `${zonePrefix}${typeLabel} | ${t.memo || ''}`,
-            icon: <MapPin size={16} color="#10B981" />,
-            data: t,
-          };
-        });
-      searchResults.push(...matchedTips);
-
-      // 3. Search Naver Geocoding Proxy via Supabase Edge Function (Priority 3)
-      if (val.length >= 2) {
-        // [Name Update] geocode -> rn-geocode to avoid naming collisions in shared project
-        const { data, error } = await supabase.functions.invoke('rn-geocode', {
-          method: 'GET',
-          queryParams: { query: val },
-        });
-
-        if (!error && data && data.addresses) {
-          const matchedAddresses = data.addresses.map((addr, idx) => ({
-            type: 'address',
-            id: `address-${idx}`,
-            title: addr.roadAddress || addr.jibunAddress,
-            subtitle: addr.englishAddress || '도로명 주소',
-            icon: <Landmark size={16} color="#F59E0B" />,
-            data: {
-              lat: parseFloat(addr.y),
-              lng: parseFloat(addr.x),
-              name: addr.roadAddress,
-            },
+      try {
+        const matchedZones = zones
+          .filter((zone) => {
+            if (zone.is_deleted) return false;
+            const matchesName = zone.name?.toLowerCase().includes(lowerQuery);
+            const matchesSubLabel = zone.polygon?.subLabels?.some((label) =>
+              label.toLowerCase().includes(lowerQuery)
+            );
+            return matchesName || matchesSubLabel;
+          })
+          .map((zone) => ({
+            type: 'zone',
+            id: zone.id,
+            title: zone.name,
+            subtitle: zone.polygon?.subLabels?.length
+              ? `${zone.polygon.subLabels.join(', ')} | ${zone.memo || '배송 구역'}`
+              : zone.memo || '배송 구역',
+            data: zone,
           }));
-          searchResults.push(...matchedAddresses);
-        }
-      }
 
-      setResults(searchResults);
-    } catch (err) {
-      console.error('Search error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const matchedTips = tips
+          .filter((tip) => {
+            if (tip.is_deleted) return false;
+            const matchesTitle = tip.title?.toLowerCase().includes(lowerQuery);
+            const matchesMemo = tip.memo?.toLowerCase().includes(lowerQuery);
+            const matchesTags = tip.tags?.some((tag) => tag.toLowerCase().includes(lowerQuery));
+            return matchesTitle || matchesMemo || matchesTags;
+          })
+          .map((tip) => {
+            const zone = zones.find((z) => z.id === tip.zone_id);
+            const zonePrefix = zone ? `[${zone.name}] ` : '';
+            const typeLabel = MARKER_TYPE_LABELS[tip.marker_type] || tip.marker_type || '배송 팁';
+
+            return {
+              type: 'tip',
+              id: tip.id,
+              title: tip.title,
+              subtitle: `${zonePrefix}${typeLabel}${tip.memo ? ` | ${tip.memo}` : ''}`,
+              data: tip,
+            };
+          });
+
+        const nextResults = [...matchedZones, ...matchedTips];
+        let nextSearchError = '';
+
+        if (trimmedQuery.length >= 2) {
+          const geocodeResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
+            {
+              method: 'GET',
+              headers: {
+                apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              },
+            }
+          );
+          const data = await geocodeResponse.json();
+
+          if (!geocodeResponse.ok) {
+            nextSearchError = '주소 검색 API 설정을 확인해주세요.';
+          } else if (data?.error) {
+            nextSearchError = data.error.message || data.error || '주소 검색에 실패했습니다.';
+          } else if (data?.addresses?.length) {
+            const matchedAddresses = data.addresses.map((address, index) => ({
+              type: 'address',
+              id: `address-${index}`,
+              title: address.roadAddress || address.jibunAddress,
+              subtitle: address.jibunAddress || address.englishAddress || '도로명 주소',
+              data: {
+                lat: parseFloat(address.y),
+                lng: parseFloat(address.x),
+                name: address.roadAddress || address.jibunAddress,
+              },
+            }));
+
+            nextResults.push(...matchedAddresses);
+          }
+        }
+
+        setResults(nextResults);
+        setSearchError(nextSearchError);
+      } catch (err) {
+        console.error('Search error:', err);
+        setSearchError('검색 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [query, zones, tips]);
 
   const handleSelect = (item) => {
     onSelectResult(item);
@@ -132,6 +156,7 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
   const clearSearch = () => {
     setQuery('');
     setResults([]);
+    setSearchError('');
     setIsOpen(false);
   };
 
@@ -142,41 +167,51 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
         <input
           type="text"
           style={styles.searchInput}
-          placeholder="구역, 팁(엘베/비번), 주소 검색..."
+          placeholder="구역, 팁, 주소 검색..."
           value={query}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(event) => setQuery(event.target.value)}
           onFocus={() => query.trim() && setIsOpen(true)}
         />
         {query && (
-          <button style={styles.clearBtn} onClick={clearSearch}>
+          <button style={styles.clearBtn} onClick={clearSearch} title="검색어 지우기">
             <X size={16} color="var(--text-secondary)" />
           </button>
         )}
       </div>
 
-      {isOpen && (results.length > 0 || loading) && (
+      {isOpen && (query.trim() || results.length > 0 || loading || searchError) && (
         <div className="glass" style={styles.dropdown}>
           {loading && <div style={styles.loadingItem}>검색 중...</div>}
-          
-          {!loading && results.length === 0 && (
+
+          {!loading && searchError && <div style={styles.errorItem}>{searchError}</div>}
+
+          {!loading && results.length === 0 && !searchError && (
             <div style={styles.noResultItem}>검색 결과가 없습니다.</div>
           )}
 
-          {!loading && results.map(item => (
-            <button
-              key={item.id}
-              style={styles.resultItem}
-              onClick={() => handleSelect(item)}
-            >
-              <div style={styles.resultIconWrapper}>
-                {item.icon}
-              </div>
-              <div style={styles.resultTextContainer}>
-                <div style={styles.resultTitle}>{item.title}</div>
-                <div style={styles.resultSubtitle}>{item.subtitle}</div>
-              </div>
-            </button>
-          ))}
+          {!loading &&
+            results.map((item) => {
+              const meta = RESULT_META[item.type] || RESULT_META.tip;
+
+              return (
+                <button
+                  key={`${item.type}-${item.id}`}
+                  style={styles.resultItem}
+                  onClick={() => handleSelect(item)}
+                >
+                  <div style={styles.resultIconWrapper}>{meta.icon}</div>
+                  <div style={styles.resultTextContainer}>
+                    <div style={styles.resultTitleRow}>
+                      <span style={{ ...styles.resultBadge, borderColor: meta.color, color: meta.color }}>
+                        {meta.label}
+                      </span>
+                      <span style={styles.resultTitle}>{item.title}</span>
+                    </div>
+                    <div style={styles.resultSubtitle}>{item.subtitle}</div>
+                  </div>
+                </button>
+              );
+            })}
         </div>
       )}
     </div>
@@ -188,7 +223,7 @@ const styles = {
     position: 'absolute',
     top: '16px',
     left: '16px',
-    right: '82px', // Make room for logout button on the right (16px edge + 54px button + 12px gap)
+    right: '82px',
     zIndex: 900,
     display: 'flex',
     flexDirection: 'column',
@@ -216,6 +251,7 @@ const styles = {
     fontSize: '16px',
     marginLeft: '12px',
     outline: 'none',
+    minWidth: 0,
   },
   clearBtn: {
     width: '28px',
@@ -231,7 +267,7 @@ const styles = {
   },
   dropdown: {
     width: '100%',
-    maxHeight: '300px',
+    maxHeight: '320px',
     overflowY: 'auto',
     borderRadius: 'var(--radius-md)',
     border: '1px solid var(--bg-card-border)',
@@ -251,6 +287,13 @@ const styles = {
     color: 'var(--text-secondary)',
     textAlign: 'center',
   },
+  errorItem: {
+    padding: '12px 16px',
+    fontSize: '13px',
+    color: 'var(--danger)',
+    borderBottom: '1px solid var(--bg-card-border)',
+    lineHeight: '1.4',
+  },
   resultItem: {
     display: 'flex',
     alignItems: 'center',
@@ -261,10 +304,6 @@ const styles = {
     textAlign: 'left',
     cursor: 'pointer',
     width: '100%',
-    transition: 'background-color var(--transition-fast)',
-  },
-  resultItemHover: {
-    backgroundColor: 'var(--bg-card-hover)',
   },
   resultIconWrapper: {
     width: '32px',
@@ -281,6 +320,22 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    minWidth: 0,
+  },
+  resultTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minWidth: 0,
+  },
+  resultBadge: {
+    flexShrink: 0,
+    padding: '2px 6px',
+    border: '1px solid',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: '700',
+    lineHeight: 1.2,
   },
   resultTitle: {
     fontSize: '15px',
@@ -293,7 +348,7 @@ const styles = {
   resultSubtitle: {
     fontSize: '12px',
     color: 'var(--text-secondary)',
-    marginTop: '2px',
+    marginTop: '4px',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',

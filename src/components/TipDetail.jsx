@@ -14,7 +14,7 @@ const MARKER_TYPES = {
   important: { emoji: '⭐', label: '중요' },
 };
 
-export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerified }) {
+export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerified, onOpenRoadview }) {
   const [photos, setPhotos] = useState([]);
   const [creatorName, setCreatorName] = useState('알 수 없음');
   const [updaterName, setUpdaterName] = useState('알 수 없음');
@@ -68,19 +68,21 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     const lat = roadviewCoords?.lat || tip.lat;
     const lng = roadviewCoords?.lng || tip.lng;
 
-    // Detect mobile device to bypass universal link native app redirection
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    let roadviewUrl;
-    if (isMobile) {
-      // Mobile-optimized Naver Map panorama viewer URL which opens directly in the mobile browser
-      roadviewUrl = `https://m.map.naver.com/viewer/panorama.naver?latitude=${lat}&longitude=${lng}`;
+    if (onOpenRoadview) {
+      onOpenRoadview(lat, lng);
     } else {
-      // Desktop full-featured V5 URL
-      roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
+      // Detect mobile device to bypass universal link native app redirection
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      let roadviewUrl;
+      if (isMobile) {
+        // Mobile-optimized Naver Map panorama viewer URL which opens directly in the mobile browser
+        roadviewUrl = `https://m.map.naver.com/viewer/panorama.naver?latitude=${lat}&longitude=${lng}`;
+      } else {
+        // Desktop full-featured V5 URL
+        roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
+      }
+      window.open(roadviewUrl, '_blank');
     }
-
-    window.open(roadviewUrl, '_blank');
   };
 
   useEffect(() => {

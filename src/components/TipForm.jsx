@@ -207,6 +207,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
           .insert({
             title: title.trim(),
             marker_type: markerType,
+            memo: memo.trim(),
             lat,
             lng,
             tags: parsedTags,

@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     // Call Naver Geocoding API
-    const naverApiUrl = `https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode?query=${encodeURIComponent(query)}`;
+    const naverApiUrl = `https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=${encodeURIComponent(query)}`;
     
     const response = await fetch(naverApiUrl, {
       method: "GET",
