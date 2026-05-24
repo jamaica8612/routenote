@@ -79,6 +79,7 @@ export default function MapContainer({
   onFinishDrawingZone,
   onFinishDrawingPath,
   trackLocationTrigger,
+  onLocationUpdate,
 }) {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
@@ -663,6 +664,10 @@ export default function MapContainer({
     if (shouldFollowRef.current) {
       mapInstance.setCenter(currentLatLng);
       if (mapInstance.getZoom() < 17) mapInstance.setZoom(17);
+    }
+
+    if (onLocationUpdate) {
+      onLocationUpdate(latitude, longitude);
     }
   };
 

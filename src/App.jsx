@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Compass, Locate, LogOut, MapPin, Plus } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
@@ -11,7 +11,7 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
-import { isPointInPolygon } from './utils/geoUtils';
+import { isPointInPolygon, findNearbyZone } from './utils/geoUtils';
 import { getDbUserId } from './utils/userUtils';
 
 export default function App() {
@@ -38,6 +38,8 @@ export default function App() {
   const [clickLng, setClickLng] = useState(null);
   const [trackLocationTrigger, setTrackLocationTrigger] = useState(0);
   const [activeRoadviewCoords, setActiveRoadviewCoords] = useState(null);
+  
+  const lastAutoOpenedZoneIdRef = useRef(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -63,10 +65,81 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      fetchData();
-    }
+    if (!currentUser) return;
+
+    fetchData();
+
+    // Subscribe to database changes for realtime updates
+    const channel = supabase
+      .channel('rn_realtime_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rn_route_tips' },
+        (payload) => {
+          console.log('Realtime change in rn_route_tips:', payload);
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rn_route_zones' },
+        (payload) => {
+          console.log('Realtime change in rn_route_zones:', payload);
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentUser]);
+
+  // Sync open tip details bottom sheet with updates from database
+  useEffect(() => {
+    if (selectedTip && tips.length > 0) {
+      const updatedTip = tips.find(t => t.id === selectedTip.id);
+      if (updatedTip) {
+        if (
+          updatedTip.title !== selectedTip.title ||
+          updatedTip.memo !== selectedTip.memo ||
+          updatedTip.marker_type !== selectedTip.marker_type ||
+          updatedTip.last_verified_at !== selectedTip.last_verified_at ||
+          updatedTip.is_deleted !== selectedTip.is_deleted
+        ) {
+          if (updatedTip.is_deleted) {
+            setSelectedTip(null);
+            setSheetOpen(false);
+          } else {
+            setSelectedTip(updatedTip);
+          }
+        }
+      } else {
+        setSelectedTip(null);
+        setSheetOpen(false);
+      }
+    }
+  }, [tips]);
+
+  // Sync open zone details bottom sheet with updates from database
+  useEffect(() => {
+    if (selectedZone && zones.length > 0) {
+      const updatedZone = zones.find(z => z.id === selectedZone.id);
+      if (updatedZone) {
+        if (
+          updatedZone.name !== selectedZone.name ||
+          updatedZone.color !== selectedZone.color ||
+          updatedZone.memo !== selectedZone.memo ||
+          JSON.stringify(updatedZone.polygon) !== JSON.stringify(selectedZone.polygon)
+        ) {
+          setSelectedZone(updatedZone);
+        }
+      } else {
+        setSelectedZone(null);
+        setSheetOpen(false);
+      }
+    }
+  }, [zones]);
 
   const fetchUserProfile = async (authUser) => {
     try {
@@ -225,7 +298,36 @@ export default function App() {
   };
 
   const handleMoveToCurrentLocation = () => {
+    lastAutoOpenedZoneIdRef.current = null; // Clear auto-open block so it forces re-evaluation!
     setTrackLocationTrigger(prev => prev + 1);
+  };
+
+  const handleLocationUpdate = (lat, lng) => {
+    if (!zones || zones.length === 0) return;
+
+    // Avoid disturbing the user if they are drawing, creating, or editing forms
+    if (isDrawingZone || isDrawingPath || sheetContent === 'zone-form' || sheetContent === 'tip-form' || sheetContent === 'path-form') {
+      return;
+    }
+
+    const nearby = findNearbyZone(lat, lng, zones, 150);
+
+    if (nearby) {
+      const zone = nearby.zone;
+      if (zone.id !== lastAutoOpenedZoneIdRef.current) {
+        lastAutoOpenedZoneIdRef.current = zone.id;
+        setSelectedZone(zone);
+        setSelectedTip(null);
+        
+        // Auto display the zone details bottom sheet
+        setSheetTitle(zone.name);
+        setSheetContent('zone-detail');
+        setSheetOpen(true);
+      }
+    } else {
+      // Reset auto-open trigger block once the user walks away from all zones
+      lastAutoOpenedZoneIdRef.current = null;
+    }
   };
 
   const handleOpenRoadview = (lat, lng) => {
@@ -483,6 +585,7 @@ export default function App() {
         setDrawCoords={setDrawCoords}
         selectedZone={selectedZone}
         trackLocationTrigger={trackLocationTrigger}
+        onLocationUpdate={handleLocationUpdate}
         onCreateZone={() => {
           setSelectedZone(null);
           setDrawCoords([]);

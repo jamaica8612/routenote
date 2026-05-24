@@ -127,3 +127,48 @@ export function findZoneForPoint(lat, lng, zones) {
   }
   return null;
 }
+
+/**
+ * Finds the closest zone to a point and returns it if it is within maxDistanceMeters.
+ * If the point is inside a zone, that zone is returned immediately with distance 0.
+ * 
+ * @param {number} lat - Latitude
+ * @param {number} lng - Longitude
+ * @param {Array} zones - Array of route zones
+ * @param {number} maxDistanceMeters - Maximum distance threshold in meters (default: 150)
+ * @returns {object|null} - { zone, distance } or null
+ */
+export function findNearbyZone(lat, lng, zones, maxDistanceMeters = 150) {
+  if (!zones || zones.length === 0) return null;
+
+  // 1. Check if point is inside any zone polygon
+  const insideZone = findZoneForPoint(lat, lng, zones);
+  if (insideZone) return { zone: insideZone, distance: 0 };
+
+  // 2. Otherwise, find the closest zone based on centroid distance
+  let closestZone = null;
+  let minDistance = Infinity;
+
+  const point = turf.point([lng, lat]);
+
+  for (const zone of zones) {
+    if (zone.is_deleted || !zone.polygon) continue;
+    const centroid = getPolygonCentroid(zone.polygon);
+    if (!centroid) continue;
+
+    const centroidPoint = turf.point([centroid.lng, centroid.lat]);
+    const dist = turf.distance(point, centroidPoint, { units: 'meters' });
+
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestZone = zone;
+    }
+  }
+
+  if (closestZone && minDistance <= maxDistanceMeters) {
+    return { zone: closestZone, distance: minDistance };
+  }
+
+  return null;
+}
+

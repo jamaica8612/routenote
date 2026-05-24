@@ -250,3 +250,15 @@ CREATE POLICY "rn_read_zone_photos_for_all" ON public.rn_route_zone_photos
 
 CREATE POLICY "rn_write_zone_photos_for_auth" ON public.rn_route_zone_photos
     FOR ALL USING (auth.role() = 'authenticated');
+
+-- 10. Enable Supabase Realtime for custom tables
+do $$
+begin
+  alter publication supabase_realtime add table public.rn_route_tips;
+  alter publication supabase_realtime add table public.rn_route_zones;
+  alter publication supabase_realtime add table public.rn_route_zone_photos;
+exception when others then
+  -- Silently ignore errors if publication doesn't exist or tables are already added
+  null;
+end $$;
+
