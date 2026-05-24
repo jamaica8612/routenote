@@ -1,8 +1,64 @@
-import * as turf from '@turf/turf';
+/**
+ * Haversine formula to compute distance between two GPS coordinates in meters.
+ * 
+ * @param {number} lat1 - Latitude of first point
+ * @param {number} lon1 - Longitude of first point
+ * @param {number} lat2 - Latitude of second point
+ * @param {number} lon2 - Longitude of second point
+ * @returns {number} - Distance in meters
+ */
+export function getHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function isPointInSinglePolygon(lat, lng, ringCoords) {
+  let inside = false;
+  const n = ringCoords.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = ringCoords[i][0], yi = ringCoords[i][1];
+    const xj = ringCoords[j][0], yj = ringCoords[j][1];
+
+    const intersect = ((yi > lat) !== (yj > lat))
+        && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function isPointInPolygonGeometry(lat, lng, coords) {
+  if (!coords || coords.length === 0) return false;
+  
+  if (!isPointInSinglePolygon(lat, lng, coords[0])) {
+    return false;
+  }
+  
+  for (let i = 1; i < coords.length; i++) {
+    if (isPointInSinglePolygon(lat, lng, coords[i])) {
+      return false; // inside a hole
+    }
+  }
+  return true;
+}
+
+function isPointInMultiPolygonGeometry(lat, lng, coords) {
+  for (const polygonCoords of coords) {
+    if (isPointInPolygonGeometry(lat, lng, polygonCoords)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Checks if a coordinate point [lat, lng] is inside a GeoJSON polygon or multipolygon.
- * Turf.js uses [lng, lat] coordinate format.
  * 
  * @param {number} lat - Latitude
  * @param {number} lng - Longitude
@@ -13,41 +69,26 @@ export function isPointInPolygon(lat, lng, polygonGeoJSON) {
   try {
     if (!polygonGeoJSON) return false;
     
-    // Create Turf point [lng, lat]
-    const point = turf.point([lng, lat]);
-    
-    let polyGeometry;
+    let geom = polygonGeoJSON;
     if (polygonGeoJSON.type === 'Feature') {
-      polyGeometry = polygonGeoJSON.geometry;
-    } else if (polygonGeoJSON.type === 'Polygon' || polygonGeoJSON.type === 'MultiPolygon') {
-      polyGeometry = polygonGeoJSON;
-    } else if (Array.isArray(polygonGeoJSON)) {
-      // Fallback fallback raw coordinates
-      let coords = [];
-      if (polygonGeoJSON.length > 0 && typeof polygonGeoJSON[0] === 'object' && 'lat' in polygonGeoJSON[0]) {
-        coords = polygonGeoJSON.map(p => [p.lng, p.lat]);
-      } else {
-        coords = polygonGeoJSON;
-      }
-      
-      if (coords.length > 0 && (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1])) {
-        coords.push(coords[0]);
-      }
-      polyGeometry = turf.polygon([coords]).geometry;
-    } else {
-      return false;
+      geom = polygonGeoJSON.geometry;
     }
-
-    return turf.booleanPointInPolygon(point, polyGeometry);
+    
+    if (geom.type === 'Polygon') {
+      return isPointInPolygonGeometry(lat, lng, geom.coordinates);
+    } else if (geom.type === 'MultiPolygon') {
+      return isPointInMultiPolygonGeometry(lat, lng, geom.coordinates);
+    }
+    
+    return false;
   } catch (error) {
-    console.error('Error calculating point in polygon:', error);
+    console.error('Error in isPointInPolygon:', error);
     return false;
   }
 }
 
 /**
- * Calculates the center (centroid) of a Polygon or MultiPolygon.
- * Used for placing zone text labels on the map.
+ * Calculates the center (centroid) of a Polygon or MultiPolygon by averaging coordinates.
  * 
  * @param {object} polygonGeoJSON - GeoJSON geometry or feature
  * @returns {object|null} - {lat, lng} of centroid or null
@@ -61,50 +102,32 @@ export function getPolygonCentroid(polygonGeoJSON) {
       geom = polygonGeoJSON.geometry;
     }
     
-    // Ensure it is a valid GeoJSON feature before passing to turf
-    const feature = turf.feature(geom);
-    const centerPoint = turf.centroid(feature);
-    const [lng, lat] = centerPoint.geometry.coordinates;
+    let sumLat = 0;
+    let sumLng = 0;
+    let count = 0;
     
-    return { lat, lng };
+    const processCoords = (coords) => {
+      if (Array.isArray(coords) && typeof coords[0] === 'number') {
+        sumLng += coords[0];
+        sumLat += coords[1];
+        count++;
+      } else if (Array.isArray(coords)) {
+        coords.forEach(processCoords);
+      }
+    };
+    
+    if (geom.coordinates) {
+      processCoords(geom.coordinates);
+    }
+    
+    if (count === 0) return null;
+    return {
+      lat: sumLat / count,
+      lng: sumLng / count
+    };
   } catch (error) {
     console.error('Centroid calculation failed:', error);
-    
-    // Fallback: simple bounding box math if turf centroid fails
-    try {
-      let lats = [];
-      let lngs = [];
-      
-      const extractCoords = (arr) => {
-        if (typeof arr[0] === 'number') {
-          lngs.push(arr[0]);
-          lats.push(arr[1]);
-        } else {
-          arr.forEach(extractCoords);
-        }
-      };
-      
-      if (polygonGeoJSON.coordinates) {
-        extractCoords(polygonGeoJSON.coordinates);
-      } else if (Array.isArray(polygonGeoJSON)) {
-        extractCoords(polygonGeoJSON);
-      }
-      
-      if (lats.length === 0) return null;
-      
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLng = Math.min(...lngs);
-      const maxLng = Math.max(...lngs);
-      
-      return {
-        lat: (minLat + maxLat) / 2,
-        lng: (minLng + maxLng) / 2
-      };
-    } catch (fallbackError) {
-      console.error('Centroid fallback failed:', fallbackError);
-      return null;
-    }
+    return null;
   }
 }
 
@@ -114,7 +137,7 @@ export function getPolygonCentroid(polygonGeoJSON) {
  * @param {number} lat - Latitude
  * @param {number} lng - Longitude
  * @param {Array} zones - Array of route zones
- * @returns {object|null} - The zone object containing the point, or null
+ * @returns {object|null} - The zone containing the point, or null
  */
 export function findZoneForPoint(lat, lng, zones) {
   if (!zones || zones.length === 0) return null;
@@ -149,15 +172,12 @@ export function findNearbyZone(lat, lng, zones, maxDistanceMeters = 150) {
   let closestZone = null;
   let minDistance = Infinity;
 
-  const point = turf.point([lng, lat]);
-
   for (const zone of zones) {
     if (zone.is_deleted || !zone.polygon) continue;
-    const centroid = getPolygonCentroid(zone.polygon);
-    if (!centroid) continue;
+    const ctr = getPolygonCentroid(zone.polygon);
+    if (!ctr) continue;
 
-    const centroidPoint = turf.point([centroid.lng, centroid.lat]);
-    const dist = turf.distance(point, centroidPoint, { units: 'meters' });
+    const dist = getHaversineDistance(lat, lng, ctr.lat, ctr.lng);
 
     if (dist < minDistance) {
       minDistance = dist;
@@ -171,4 +191,3 @@ export function findNearbyZone(lat, lng, zones, maxDistanceMeters = 150) {
 
   return null;
 }
-
