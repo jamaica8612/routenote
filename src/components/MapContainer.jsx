@@ -214,6 +214,25 @@ export default function MapContainer({
   }, [scriptLoaded, setDrawCoords]);
 
   useEffect(() => {
+    const mapEl = mapRef.current;
+    if (!mapEl) return;
+
+    const handleUserInteraction = () => {
+      shouldFollowRef.current = false;
+    };
+
+    mapEl.addEventListener('mousedown', handleUserInteraction, { passive: true });
+    mapEl.addEventListener('touchstart', handleUserInteraction, { passive: true });
+    mapEl.addEventListener('wheel', handleUserInteraction, { passive: true });
+
+    return () => {
+      mapEl.removeEventListener('mousedown', handleUserInteraction);
+      mapEl.removeEventListener('touchstart', handleUserInteraction);
+      mapEl.removeEventListener('wheel', handleUserInteraction);
+    };
+  }, [mapInstance]);
+
+  useEffect(() => {
     if (!mapInstance || !selectedResult) return;
 
     shouldFollowRef.current = false;
