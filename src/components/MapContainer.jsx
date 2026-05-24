@@ -100,6 +100,7 @@ export default function MapContainer({
   const locationMarkerRef = useRef(null);
   const accuracyCircleRef = useRef(null);
   const streetLayerRef = useRef(null);
+  const shouldFollowRef = useRef(true);
 
   useEffect(() => {
     isDrawingZoneRef.current = isDrawingZone;
@@ -202,6 +203,10 @@ export default function MapContainer({
       }
     });
 
+    window.naver.maps.Event.addListener(map, 'dragstart', () => {
+      shouldFollowRef.current = false;
+    });
+
     return () => {
       window.naver.maps.Event.clearInstanceListeners(map);
     };
@@ -209,6 +214,8 @@ export default function MapContainer({
 
   useEffect(() => {
     if (!mapInstance || !selectedResult) return;
+
+    shouldFollowRef.current = false;
 
     if (selectedResult.type === 'address') {
       const { lat, lng } = selectedResult.data;
@@ -540,6 +547,8 @@ export default function MapContainer({
       return;
     }
 
+    shouldFollowRef.current = true;
+
     if (isTrackingLocation) {
       // If already tracking, center map
       if (locationMarkerRef.current) {
@@ -581,7 +590,10 @@ export default function MapContainer({
 
     // If turning on roadview mode, automatically enable location tracking so they see the blue dot!
     if (nextMode) {
+      shouldFollowRef.current = true;
       startLocationTracking();
+    } else {
+      stopLocationTracking();
     }
   };
 
@@ -648,8 +660,10 @@ export default function MapContainer({
       accuracyCircleRef.current.setMap(mapInstance);
     }
 
-    mapInstance.setCenter(currentLatLng);
-    if (mapInstance.getZoom() < 17) mapInstance.setZoom(17);
+    if (shouldFollowRef.current) {
+      mapInstance.setCenter(currentLatLng);
+      if (mapInstance.getZoom() < 17) mapInstance.setZoom(17);
+    }
   };
 
   const stopLocationTracking = () => {
@@ -658,6 +672,12 @@ export default function MapContainer({
       locationWatchIdRef.current = null;
     }
     setIsTrackingLocation(false);
+    if (locationMarkerRef.current) {
+      locationMarkerRef.current.setMap(null);
+    }
+    if (accuracyCircleRef.current) {
+      accuracyCircleRef.current.setMap(null);
+    }
   };
 
   const handleToggleLocationTracking = () => {

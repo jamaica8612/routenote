@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Image, Map } from 'lucide-react';
+import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Image } from 'lucide-react';
 import { getDbUserId } from '../utils/userUtils';
 
 const MARKER_TYPES = {
@@ -23,67 +23,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [roadviewCoords, setRoadviewCoords] = useState(null);
 
-  useEffect(() => {
-    if (!tip) return;
-    setRoadviewCoords(null); // Reset when tip changes
-
-    let checkInterval;
-    const resolvePano = () => {
-      if (window.naver && window.naver.maps && window.naver.maps.Panorama) {
-        clearInterval(checkInterval);
-        try {
-          const dummyDiv = document.createElement('div');
-          const pano = new window.naver.maps.Panorama(dummyDiv, {
-            position: new window.naver.maps.LatLng(tip.lat, tip.lng),
-          });
-
-          const listener = window.naver.maps.Event.addListener(pano, 'pano_changed', () => {
-            const pos = pano.getPosition();
-            if (pos) {
-              setRoadviewCoords({ lat: pos.lat(), lng: pos.lng() });
-            }
-            window.naver.maps.Event.removeListener(listener);
-          });
-        } catch (err) {
-          console.warn("Failed to resolve nearest roadview:", err);
-        }
-      }
-    };
-
-    if (window.naver && window.naver.maps && window.naver.maps.Panorama) {
-      resolvePano();
-    } else {
-      checkInterval = setInterval(resolvePano, 500);
-    }
-
-    return () => {
-      if (checkInterval) clearInterval(checkInterval);
-    };
-  }, [tip]);
-
-  const handleOpenRoadview = () => {
-    // Snap to resolved nearest roadview coordinates, fallback to tip coordinates if unresolved
-    const lat = roadviewCoords?.lat || tip.lat;
-    const lng = roadviewCoords?.lng || tip.lng;
-
-    if (onOpenRoadview) {
-      onOpenRoadview(lat, lng);
-    } else {
-      // Detect mobile device to bypass universal link native app redirection
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      let roadviewUrl;
-      if (isMobile) {
-        // Mobile-optimized Naver Map panorama viewer URL which opens directly in the mobile browser
-        roadviewUrl = `https://m.map.naver.com/viewer/panorama.naver?latitude=${lat}&longitude=${lng}`;
-      } else {
-        // Desktop full-featured V5 URL
-        roadviewUrl = `https://map.naver.com/v5/?c=${lng},${lat},17,0,0,0,dh&p=${lng},${lat},10,0,normal,rv`;
-      }
-      window.open(roadviewUrl, '_blank');
-    }
-  };
 
   useEffect(() => {
     if (!tip) return;
@@ -334,17 +274,6 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
       {/* Primary Actions (Verification & Editing) */}
       <div style={styles.actionsContainer}>
-        {/* Row 1: Roadview Button (Full width, placed on top) */}
-        <button
-          className="btn btn-primary"
-          style={styles.roadviewBtn}
-          onClick={handleOpenRoadview}
-          title="네이버 로드뷰 보기"
-        >
-          <Map size={18} />
-          <span style={{ fontWeight: '600' }}>로드뷰 보기</span>
-        </button>
-
         {/* Row 2: Verification & History */}
         <div style={styles.subActions}>
           {currentUser && currentUser.role !== 'viewer' ? (
@@ -550,19 +479,6 @@ const styles = {
     gap: '10px',
     width: '100%',
     marginTop: '8px',
-  },
-  roadviewBtn: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '14px',
-    borderRadius: 'var(--radius-md)',
-    backgroundColor: 'var(--primary)',
-    color: '#FFFFFF',
-    border: 'none',
-    cursor: 'pointer',
   },
   subActions: {
     display: 'flex',
