@@ -304,8 +304,9 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
                             handlePhotoDelete(p);
                           }}
                           title="이미지 삭제"
+                          aria-label="이미지 삭제"
                         >
-                          ✕
+                          <Trash2 size={12} color="#FFFFFF" strokeWidth={2.4} />
                         </button>
                       )}
                     </div>
