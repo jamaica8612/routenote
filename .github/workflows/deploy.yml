@@ -29,8 +29,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: https://xrrdokcjhjqdfvwtbenl.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhycmRva2NqaGpxZGZ2d3RiZW5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDUwMTcsImV4cCI6MjA5MjY4MTAxN30.DTW5TCFTwDs3Qmsd7-7YkQOmF1OmkvDma4YpNcPi0W4
+          VITE_SUPABASE_URL: https://dewusorjwzhsdhrsrvbg.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_1xZaekW9nP-PVYN02DjQxA_Pohfveoz
           VITE_NAVER_MAP_CLIENT_ID: ${{ secrets.NAVER_MAP_CLIENT_ID }}
 
       - name: Deploy to GitHub Pages
