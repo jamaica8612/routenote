@@ -324,6 +324,18 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const canComment = currentUser && currentUser.role !== 'viewer';
   const activeComments = comments.filter((c) => !c.is_deleted);
 
+  // 댓글왕 계산: 가장 많은 댓글을 단 사람(들) - 최소 2개 이상이어야 자격 부여
+  const commentKingIds = (() => {
+    if (activeComments.length < 2) return new Set();
+    const countMap = {};
+    activeComments.forEach((c) => {
+      if (c.created_by) countMap[c.created_by] = (countMap[c.created_by] || 0) + 1;
+    });
+    const maxCount = Math.max(...Object.values(countMap));
+    if (maxCount < 2) return new Set();
+    return new Set(Object.entries(countMap).filter(([, cnt]) => cnt === maxCount).map(([id]) => id));
+  })();
+
   return (
     <div style={styles.container}>
       {/* 제목 */}
@@ -452,14 +464,24 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
             const isAdmin = currentUser?.role === 'admin';
             const canDelete = (isOwn || isAdmin) && !isDemoUser(currentUser);
             const isDeleting = deletingCommentId === comment.id;
+            const isKing = comment.created_by && commentKingIds.has(comment.created_by);
+            const displayName = isOwn ? '나' : comment.author_name;
 
             return (
               <div key={comment.id} style={{ ...styles.commentItem, ...(isOwn ? styles.commentItemOwn : {}) }}>
-                <div style={styles.commentBubble}>
+                <div style={{
+                  ...styles.commentBubble,
+                  ...(isKing ? styles.commentBubbleKing : {}),
+                }}>
                   <div style={styles.commentMeta}>
                     <span style={{ ...styles.commentAuthor, ...(isOwn ? { color: 'var(--primary)' } : {}) }}>
-                      {isOwn ? '나' : comment.author_name}
+                      {displayName}
                     </span>
+                    {isKing && (
+                      <span style={styles.kingBadge} title="댓글왕">
+                        👑 댓글왕
+                      </span>
+                    )}
                     <span style={styles.commentTime}>{formatRelativeTime(comment.created_at)}</span>
                     {canDelete && (
                       <button
@@ -659,6 +681,21 @@ const styles = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     margin: 0,
+  },
+  commentBubbleKing: {
+    borderColor: 'rgba(251, 191, 36, 0.5)',
+    backgroundColor: 'rgba(251, 191, 36, 0.06)',
+  },
+  kingBadge: {
+    fontSize: '10px',
+    fontWeight: '700',
+    color: '#D97706',
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+    border: '1px solid rgba(251, 191, 36, 0.4)',
+    borderRadius: '8px',
+    padding: '1px 6px',
+    whiteSpace: 'nowrap',
+    letterSpacing: '0.02em',
   },
   commentForm: {
     display: 'flex',
