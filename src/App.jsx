@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, Compass, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
+import { Bell, CheckCircle2, Compass, Globe2, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -41,6 +41,9 @@ export default function App() {
   
 
   const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [locationShareTarget, setLocationShareTarget] = useState(null);
+  const [locationShareMembers, setLocationShareMembers] = useState([]);
+  const [loadingShareMembers, setLoadingShareMembers] = useState(false);
   const [teamMembers, setTeamMembers] = useState({});
   const presenceChannelRef = useRef(null);
   const myLatLngRef = useRef(null);
@@ -364,69 +367,110 @@ export default function App() {
     setTrackLocationTrigger(prev => prev + 1);
   };
 
+  const trackSharedLocation = async (lat, lng, targetId = locationShareTarget) => {
+    if (!presenceChannelRef.current) return;
+    await presenceChannelRef.current.track({
+      user_id: currentUser?.id,
+      name: currentUser?.name || 'Member',
+      target_id: targetId,
+      lat,
+      lng,
+      updated_at: new Date().toISOString(),
+    });
+  };
+
   const handleLocationUpdate = (lat, lng) => {
-    // 위치 공유 중이면 Presence 업데이트
     myLatLngRef.current = { lat, lng };
-    if (isSharingLocation && presenceChannelRef.current) {
-      presenceChannelRef.current.track({
-        user_id: currentUser?.id,
-        name: currentUser?.name || '팀원',
-        lat,
-        lng,
-        updated_at: new Date().toISOString(),
-      });
+    if (isSharingLocation) {
+      trackSharedLocation(lat, lng);
     }
   };
 
-  const handleToggleLocationSharing = () => {
-    if (isSharingLocation) {
-      presenceChannelRef.current?.untrack();
-      setIsSharingLocation(false);
-      setTeamMembers({});
-      return;
-    }
+  const ensurePresenceChannel = () => {
+    if (presenceChannelRef.current) return;
 
-    // 새 채널 생성 (없을 때만)
-    if (!presenceChannelRef.current) {
-      presenceChannelRef.current = supabase.channel('rn_team_presence', {
-        config: { presence: { key: currentUser?.id || 'unknown' } },
-      });
+    presenceChannelRef.current = supabase.channel('rn_team_presence', {
+      config: { presence: { key: currentUser?.id || 'unknown' } },
+    });
 
-      presenceChannelRef.current
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannelRef.current.presenceState();
-          const members = {};
-          Object.entries(state).forEach(([userId, presences]) => {
-            if (userId !== currentUser?.id && presences.length > 0) {
-              members[userId] = presences[0];
-            }
-          });
-          setTeamMembers(members);
-        })
-        .on('presence', { event: 'leave' }, ({ key }) => {
-          setTeamMembers((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED' && myLatLngRef.current) {
-            await presenceChannelRef.current.track({
-              user_id: currentUser?.id,
-              name: currentUser?.name || '팀원',
-              lat: myLatLngRef.current.lat,
-              lng: myLatLngRef.current.lng,
-              updated_at: new Date().toISOString(),
-            });
+    presenceChannelRef.current
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannelRef.current.presenceState();
+        const members = {};
+        Object.entries(state).forEach(([userId, presences]) => {
+          const presence = presences[0];
+          if (
+            userId !== currentUser?.id
+            && presence
+            && (!presence.target_id || presence.target_id === currentUser?.id)
+          ) {
+            members[userId] = presence;
           }
         });
-    }
-
-    setIsSharingLocation(true);
-    // 위치 추적도 자동 시작
-    setTrackLocationTrigger((prev) => prev + 1);
+        setTeamMembers(members);
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        setTeamMembers((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && myLatLngRef.current && isSharingLocation) {
+          await trackSharedLocation(myLatLngRef.current.lat, myLatLngRef.current.lng);
+        }
+      });
   };
+
+  const stopLocationSharing = () => {
+    presenceChannelRef.current?.untrack();
+    setIsSharingLocation(false);
+    setLocationShareTarget(null);
+    setSheetOpen(false);
+  };
+
+  const startLocationSharing = async (targetId = null) => {
+    setLocationShareTarget(targetId);
+    ensurePresenceChannel();
+    if (myLatLngRef.current) {
+      await trackSharedLocation(myLatLngRef.current.lat, myLatLngRef.current.lng, targetId);
+    }
+    setIsSharingLocation(true);
+    setTrackLocationTrigger((prev) => prev + 1);
+    setSheetOpen(false);
+  };
+
+  const fetchLocationShareMembers = async () => {
+    if (!currentUser) return;
+    setLoadingShareMembers(true);
+    try {
+      const { data, error } = await supabase
+        .from('rn_profiles')
+        .select('id, name, role')
+        .neq('id', currentUser.id)
+        .order('name');
+      if (error) throw error;
+      setLocationShareMembers(data || []);
+    } catch (err) {
+      console.error('Failed to load share targets:', err);
+      setLocationShareMembers([]);
+    } finally {
+      setLoadingShareMembers(false);
+    }
+  };
+
+  const handleOpenLocationSharing = () => {
+    fetchLocationShareMembers();
+    setSheetTitle('위치 공유');
+    setSheetContent('location-share');
+    setSheetOpen(true);
+  };
+
+  useEffect(() => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+    ensurePresenceChannel();
+  }, [currentUser?.id]);
 
   const handleOpenRoadview = (lat, lng) => {
     setActiveRoadviewCoords({ lat, lng });
@@ -616,6 +660,68 @@ export default function App() {
             }}
           />
         );
+      case 'location-share': {
+        const activeTargetName = locationShareTarget
+          ? locationShareMembers.find(member => member.id === locationShareTarget)?.name || '선택한 팀원'
+          : '전체 팀원';
+
+        return (
+          <div style={stylesShare.container}>
+            <div style={stylesShare.statusCard}>
+              <div style={stylesShare.statusIcon(isSharingLocation)}>
+                {isSharingLocation ? <CheckCircle2 size={18} /> : <Users size={18} />}
+              </div>
+              <div style={stylesShare.statusText}>
+                <strong>{isSharingLocation ? '공유 중' : '공유 대기'}</strong>
+                <span>{isSharingLocation ? `${activeTargetName}에게 내 위치를 보여주는 중입니다.` : '공유할 대상을 선택하세요.'}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={stylesShare.targetBtn(!locationShareTarget)}
+              onClick={() => startLocationSharing(null)}
+            >
+              <Globe2 size={18} />
+              <span>전체 팀원에게 공유</span>
+              {!locationShareTarget && isSharingLocation && <CheckCircle2 size={16} color="var(--success)" />}
+            </button>
+
+            <div style={stylesShare.memberList}>
+              {loadingShareMembers && <p style={stylesShare.emptyText}>팀원 목록을 불러오는 중...</p>}
+              {!loadingShareMembers && locationShareMembers.length === 0 && (
+                <p style={stylesShare.emptyText}>공유할 팀원이 없습니다.</p>
+              )}
+              {!loadingShareMembers && locationShareMembers.map((member) => (
+                <button
+                  key={member.id}
+                  type="button"
+                  className="btn btn-secondary"
+                  style={stylesShare.targetBtn(locationShareTarget === member.id)}
+                  onClick={() => startLocationSharing(member.id)}
+                >
+                  <span style={stylesShare.avatar}>{(member.name || '팀').charAt(0)}</span>
+                  <span style={stylesShare.memberName}>{member.name || '이름 없음'}</span>
+                  <span style={stylesShare.memberRole}>{member.role || 'member'}</span>
+                  {locationShareTarget === member.id && isSharingLocation && <CheckCircle2 size={16} color="var(--success)" />}
+                </button>
+              ))}
+            </div>
+
+            {isSharingLocation && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={stylesShare.stopBtn}
+                onClick={stopLocationSharing}
+              >
+                위치 공유 중지
+              </button>
+            )}
+          </div>
+        );
+      }
       case 'notifications':
         return (
           <div style={stylesNoti.container}>
@@ -660,6 +766,96 @@ export default function App() {
     body: { display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 },
     message: { fontSize: '13px', color: 'var(--text-primary)', lineHeight: '1.45', margin: 0 },
     time: { fontSize: '11px', color: 'var(--text-muted)' },
+  };
+
+  const stylesShare = {
+    container: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px',
+      paddingBottom: '8px',
+    },
+    statusCard: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '14px',
+      borderRadius: '14px',
+      backgroundColor: 'rgba(99, 102, 241, 0.08)',
+      border: '1px solid rgba(99, 102, 241, 0.18)',
+    },
+    statusIcon: (active) => ({
+      width: '36px',
+      height: '36px',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#FFFFFF',
+      background: active
+        ? 'linear-gradient(135deg, #10B981, #059669)'
+        : 'linear-gradient(135deg, #6366F1, #4F46E5)',
+      flexShrink: 0,
+    }),
+    statusText: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '3px',
+      fontSize: '13px',
+      color: 'var(--text-secondary)',
+    },
+    targetBtn: (active) => ({
+      width: '100%',
+      minHeight: '48px',
+      justifyContent: 'flex-start',
+      gap: '10px',
+      padding: '12px 14px',
+      borderRadius: '14px',
+      backgroundColor: active ? 'rgba(16, 185, 129, 0.10)' : 'var(--bg-input)',
+      border: active ? '1px solid rgba(16, 185, 129, 0.36)' : '1px solid var(--bg-card-border)',
+      color: 'var(--text-primary)',
+    }),
+    memberList: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+    },
+    avatar: {
+      width: '28px',
+      height: '28px',
+      borderRadius: '10px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(99, 102, 241, 0.16)',
+      color: 'var(--primary)',
+      fontSize: '13px',
+      fontWeight: 800,
+      flexShrink: 0,
+    },
+    memberName: {
+      flex: 1,
+      textAlign: 'left',
+      fontSize: '14px',
+      fontWeight: 700,
+    },
+    memberRole: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      textTransform: 'uppercase',
+    },
+    emptyText: {
+      padding: '16px 4px',
+      textAlign: 'center',
+      fontSize: '13px',
+      color: 'var(--text-muted)',
+    },
+    stopBtn: {
+      marginTop: '4px',
+      width: '100%',
+      borderRadius: '14px',
+      minHeight: '46px',
+    },
   };
 
   if (authLoading) {
@@ -777,9 +973,9 @@ export default function App() {
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
           className="btn btn-icon map-action-btn"
-          onClick={handleToggleLocationSharing}
+          onClick={handleOpenLocationSharing}
           aria-label={isSharingLocation ? '위치 공유 중지' : '팀원에게 위치 공유'}
-          title={isSharingLocation ? '위치 공유 중 (탭하여 중지)' : '팀원에게 위치 공유'}
+          title={isSharingLocation ? '위치 공유 설정' : '팀원에게 위치 공유'}
           style={styles.locationShareBtn(isSharingLocation, currentUser?.role === 'admin')}
         >
           <Users size={18} color="#FFFFFF" strokeWidth={2.2} />
