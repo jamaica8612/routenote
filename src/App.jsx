@@ -11,7 +11,7 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
-import { isPointInPolygon, findNearbyZone } from './utils/geoUtils';
+import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
 
 export default function App() {
@@ -39,7 +39,6 @@ export default function App() {
   const [trackLocationTrigger, setTrackLocationTrigger] = useState(0);
   const [activeRoadviewCoords, setActiveRoadviewCoords] = useState(null);
   
-  const lastAutoOpenedZoneIdRef = useRef(null);
 
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [teamMembers, setTeamMembers] = useState({});
@@ -362,49 +361,22 @@ export default function App() {
   };
 
   const handleMoveToCurrentLocation = () => {
-    lastAutoOpenedZoneIdRef.current = null; // Clear auto-open block so it forces re-evaluation!
     setTrackLocationTrigger(prev => prev + 1);
   };
 
   const handleLocationUpdate = (lat, lng) => {
-    if (!zones || zones.length === 0) return;
-
-    // Avoid disturbing the user if they are drawing, creating, or editing forms
-    if (isDrawingZone || isDrawingPath || sheetContent === 'zone-form' || sheetContent === 'tip-form' || sheetContent === 'path-form') {
-      return;
+    // 위치 공유 중이면 Presence 업데이트
+    myLatLngRef.current = { lat, lng };
+    if (isSharingLocation && presenceChannelRef.current) {
+      presenceChannelRef.current.track({
+        user_id: currentUser?.id,
+        name: currentUser?.name || '팀원',
+        lat,
+        lng,
+        updated_at: new Date().toISOString(),
+      });
     }
-
-    const nearby = findNearbyZone(lat, lng, zones, 150);
-
-    if (nearby) {
-      const zone = nearby.zone;
-      if (zone.id !== lastAutoOpenedZoneIdRef.current) {
-        lastAutoOpenedZoneIdRef.current = zone.id;
-        setSelectedZone(zone);
-        setSelectedTip(null);
-        
-        // Auto display the zone details bottom sheet
-        setSheetTitle(zone.name);
-        setSheetContent('zone-detail');
-        setSheetOpen(true);
-      }
-    } else {
-      // Reset auto-open trigger block once the user walks away from all zones
-      lastAutoOpenedZoneIdRef.current = null;
-    }
-
-  // 위치 공유 중이면 Presence 업데이트
-  myLatLngRef.current = { lat, lng };
-  if (isSharingLocation && presenceChannelRef.current) {
-    presenceChannelRef.current.track({
-      user_id: currentUser?.id,
-      name: currentUser?.name || '팀원',
-      lat,
-      lng,
-      updated_at: new Date().toISOString(),
-    });
-  }
-};
+  };
 
   const handleToggleLocationSharing = () => {
     if (isSharingLocation) {
