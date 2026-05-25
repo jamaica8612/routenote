@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, CheckCircle2, Compass, Globe2, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
+import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -44,6 +44,8 @@ export default function App() {
   const [locationShareTarget, setLocationShareTarget] = useState(null);
   const [locationShareMembers, setLocationShareMembers] = useState([]);
   const [loadingShareMembers, setLoadingShareMembers] = useState(false);
+  const [locationShareRequests, setLocationShareRequests] = useState([]);
+  const [locationShareReady, setLocationShareReady] = useState(true);
   const [teamMembers, setTeamMembers] = useState({});
   const presenceChannelRef = useRef(null);
   const myLatLngRef = useRef(null);
@@ -479,7 +481,7 @@ export default function App() {
 
   const handleOpenLocationSharing = () => {
     fetchLocationShareMembers();
-    setSheetTitle('위치 공유');
+    setSheetTitle('위치공유 요청');
     setSheetContent('location-share');
     setSheetOpen(true);
   };
@@ -487,6 +489,152 @@ export default function App() {
   useEffect(() => {
     if (!currentUser || isDemoUser(currentUser)) return;
     ensurePresenceChannel();
+  }, [currentUser?.id]);
+
+  const getLocationSharePartnerId = (request) => {
+    if (!request || !currentUser) return null;
+    return request.requester_id === currentUser.id ? request.recipient_id : request.requester_id;
+  };
+
+  const getLocationSharePartnerName = (request) => {
+    const partnerId = getLocationSharePartnerId(request);
+    return locationShareMembers.find(member => member.id === partnerId)?.name || '선택한 팀원';
+  };
+
+  const fetchLocationShareRequests = async () => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+    const { data, error } = await supabase
+      .from('rn_location_share_requests')
+      .select('*')
+      .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+      .in('status', ['pending', 'accepted'])
+      .order('updated_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.warn('Location share request table is not ready:', error.message);
+      setLocationShareReady(false);
+      setLocationShareRequests([]);
+      return;
+    }
+
+    setLocationShareReady(true);
+    setLocationShareRequests(data || []);
+  };
+
+  const notifyLocationShare = async ({ recipientId, type, message }) => {
+    try {
+      await supabase.from('rn_notifications').insert({
+        recipient_id: recipientId,
+        sender_id: currentUser.id,
+        type,
+        message,
+      });
+    } catch (err) {
+      console.warn('Location share notification failed:', err.message);
+    }
+  };
+
+  const requestLocationShare = async (recipientId) => {
+    if (!locationShareReady) {
+      alert('위치공유 요청 기능을 사용하려면 DB 마이그레이션 적용이 필요합니다.');
+      return;
+    }
+
+    const recipient = locationShareMembers.find(member => member.id === recipientId);
+    const { error } = await supabase
+      .from('rn_location_share_requests')
+      .insert({
+        requester_id: currentUser.id,
+        recipient_id: recipientId,
+      });
+
+    if (error) {
+      alert('위치공유 요청 실패: ' + error.message);
+      return;
+    }
+
+    await notifyLocationShare({
+      recipientId,
+      type: 'location_share_request',
+      message: `${currentUser.name || '팀원'}님이 위치공유를 요청했습니다.`,
+    });
+    await fetchLocationShareRequests();
+    alert(`${recipient?.name || '팀원'}님에게 위치공유 요청을 보냈습니다.`);
+  };
+
+  const acceptLocationShareRequest = async (request) => {
+    const partnerId = getLocationSharePartnerId(request);
+    const { error } = await supabase
+      .from('rn_location_share_requests')
+      .update({
+        status: 'accepted',
+        responded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', request.id);
+
+    if (error) {
+      alert('위치공유 수락 실패: ' + error.message);
+      return;
+    }
+
+    await notifyLocationShare({
+      recipientId: partnerId,
+      type: 'location_share_accepted',
+      message: `${currentUser.name || '팀원'}님이 위치공유 요청을 수락했습니다.`,
+    });
+    await fetchLocationShareRequests();
+    await startLocationSharing(partnerId);
+  };
+
+  const updateLocationShareRequestStatus = async (request, status) => {
+    const patch = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    if (status === 'ended' || status === 'canceled') patch.ended_at = new Date().toISOString();
+    if (status === 'declined') patch.responded_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('rn_location_share_requests')
+      .update(patch)
+      .eq('id', request.id);
+
+    if (error) {
+      alert('위치공유 상태 변경 실패: ' + error.message);
+      return;
+    }
+
+    await fetchLocationShareRequests();
+    if (status === 'ended' || status === 'canceled') {
+      stopLocationSharing();
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+
+    fetchLocationShareRequests();
+    const channel = supabase
+      .channel(`rn_location_share_requests_${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rn_location_share_requests' },
+        (payload) => {
+          fetchLocationShareRequests();
+          if (
+            payload.eventType === 'UPDATE'
+            && payload.new?.status === 'accepted'
+            && payload.new?.requester_id === currentUser.id
+          ) {
+            startLocationSharing(payload.new.recipient_id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, [currentUser?.id]);
 
   const handleOpenRoadview = (lat, lng) => {
@@ -678,62 +826,168 @@ export default function App() {
           />
         );
       case 'location-share': {
-        const activeTargetName = locationShareTarget
-          ? locationShareMembers.find(member => member.id === locationShareTarget)?.name || '선택한 팀원'
-          : '전체 팀원';
+        const acceptedRequest = locationShareRequests.find(request => request.status === 'accepted');
+        const incomingRequests = locationShareRequests.filter(
+          request => request.status === 'pending' && request.recipient_id === currentUser?.id,
+        );
+        const outgoingRequests = locationShareRequests.filter(
+          request => request.status === 'pending' && request.requester_id === currentUser?.id,
+        );
+        const activePartnerId = acceptedRequest ? getLocationSharePartnerId(acceptedRequest) : locationShareTarget;
+        const activePartnerName = acceptedRequest
+          ? getLocationSharePartnerName(acceptedRequest)
+          : locationShareMembers.find(member => member.id === locationShareTarget)?.name || '상대';
 
         return (
           <div style={stylesShare.container}>
             <div style={stylesShare.statusCard}>
-              <div style={stylesShare.statusIcon(isSharingLocation)}>
-                {isSharingLocation ? <CheckCircle2 size={18} /> : <Users size={18} />}
+              <div style={stylesShare.statusIcon(isSharingLocation || !!acceptedRequest)}>
+                {isSharingLocation || acceptedRequest ? <CheckCircle2 size={18} /> : <Users size={18} />}
               </div>
               <div style={stylesShare.statusText}>
-                <strong>{isSharingLocation ? '공유 중' : '공유 대기'}</strong>
-                <span>{isSharingLocation ? `${activeTargetName}에게 내 위치를 보여주는 중입니다.` : '공유할 대상을 선택하세요.'}</span>
+                <strong>
+                  {isSharingLocation ? '위치공유 중' : acceptedRequest ? '수락된 위치공유' : '위치공유 요청'}
+                </strong>
+                <span>
+                  {isSharingLocation
+                    ? `${activePartnerName}님과 서로 위치를 공유하고 있습니다.`
+                    : acceptedRequest
+                      ? `${activePartnerName}님과의 공유가 일시 중지되어 있습니다. 다시 시작할 수 있습니다.`
+                      : '상대에게 요청을 보내고, 상대가 수락하면 서로 위치가 보입니다.'}
+                </span>
               </div>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={stylesShare.targetBtn(!locationShareTarget)}
-              onClick={() => startLocationSharing(null)}
-            >
-              <Globe2 size={18} />
-              <span>전체 팀원에게 공유</span>
-              {!locationShareTarget && isSharingLocation && <CheckCircle2 size={16} color="var(--success)" />}
-            </button>
+            {!locationShareReady && (
+              <div style={stylesShare.notice}>
+                위치공유 요청 DB가 아직 준비되지 않았습니다. 마이그레이션 적용 후 사용할 수 있습니다.
+              </div>
+            )}
 
-            <div style={stylesShare.memberList}>
-              {loadingShareMembers && <p style={stylesShare.emptyText}>팀원 목록을 불러오는 중...</p>}
-              {!loadingShareMembers && locationShareMembers.length === 0 && (
-                <p style={stylesShare.emptyText}>공유할 팀원이 없습니다.</p>
-              )}
-              {!loadingShareMembers && locationShareMembers.map((member) => (
-                <button
-                  key={member.id}
-                  type="button"
-                  className="btn btn-secondary"
-                  style={stylesShare.targetBtn(locationShareTarget === member.id)}
-                  onClick={() => startLocationSharing(member.id)}
-                >
-                  <span style={stylesShare.avatar}>{(member.name || '팀').charAt(0)}</span>
-                  <span style={stylesShare.memberName}>{member.name || '이름 없음'}</span>
-                  <span style={stylesShare.memberRole}>{member.role || 'member'}</span>
-                  {locationShareTarget === member.id && isSharingLocation && <CheckCircle2 size={16} color="var(--success)" />}
-                </button>
-              ))}
-            </div>
+            {acceptedRequest && (
+              <div style={stylesShare.section}>
+                <h3 style={stylesShare.sectionTitle}>진행 중인 공유</h3>
+                <div style={stylesShare.requestCard}>
+                  <div>
+                    <strong>{activePartnerName}님</strong>
+                    <p style={stylesShare.requestText}>{isSharingLocation ? '현재 서로 위치를 보는 중입니다.' : '공유를 다시 시작할 수 있습니다.'}</p>
+                  </div>
+                  <div style={stylesShare.requestActions}>
+                    {!isSharingLocation && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={stylesShare.compactBtn}
+                        onClick={() => startLocationSharing(activePartnerId)}
+                      >
+                        다시 시작
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={stylesShare.compactBtn}
+                      onClick={() => updateLocationShareRequestStatus(acceptedRequest, 'ended')}
+                    >
+                      종료
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {isSharingLocation && (
+            {incomingRequests.length > 0 && (
+              <div style={stylesShare.section}>
+                <h3 style={stylesShare.sectionTitle}>받은 요청</h3>
+                {incomingRequests.map((request) => (
+                  <div key={request.id} style={stylesShare.requestCard}>
+                    <div>
+                      <strong>{getLocationSharePartnerName(request)}님</strong>
+                      <p style={stylesShare.requestText}>위치공유를 요청했습니다.</p>
+                    </div>
+                    <div style={stylesShare.requestActions}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={stylesShare.compactBtn}
+                        onClick={() => acceptLocationShareRequest(request)}
+                      >
+                        수락
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={stylesShare.compactBtn}
+                        onClick={() => updateLocationShareRequestStatus(request, 'declined')}
+                      >
+                        거절
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {outgoingRequests.length > 0 && (
+              <div style={stylesShare.section}>
+                <h3 style={stylesShare.sectionTitle}>보낸 요청</h3>
+                {outgoingRequests.map((request) => (
+                  <div key={request.id} style={stylesShare.requestCard}>
+                    <div>
+                      <strong>{getLocationSharePartnerName(request)}님</strong>
+                      <p style={stylesShare.requestText}>수락을 기다리는 중입니다.</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={stylesShare.compactBtn}
+                      onClick={() => updateLocationShareRequestStatus(request, 'canceled')}
+                    >
+                      취소
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!acceptedRequest && (
+              <div style={stylesShare.section}>
+                <h3 style={stylesShare.sectionTitle}>요청 보낼 팀원</h3>
+                <div style={stylesShare.memberList}>
+                  {loadingShareMembers && <p style={stylesShare.emptyText}>팀원 목록을 불러오는 중...</p>}
+                  {!loadingShareMembers && locationShareMembers.length === 0 && (
+                    <p style={stylesShare.emptyText}>요청을 보낼 팀원이 없습니다.</p>
+                  )}
+                  {!loadingShareMembers && locationShareMembers.map((member) => {
+                    const waitingRequest = outgoingRequests.find(request => request.recipient_id === member.id);
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        className="btn btn-secondary"
+                        style={stylesShare.targetBtn(!!waitingRequest)}
+                        onClick={() => requestLocationShare(member.id)}
+                        disabled={!locationShareReady || !!waitingRequest}
+                      >
+                        <span style={stylesShare.avatar}>{(member.name || '팀').charAt(0)}</span>
+                        <span style={stylesShare.memberName}>{member.name || '이름 없음'}</span>
+                        <span style={stylesShare.memberRole}>{waitingRequest ? '요청 대기 중' : member.role || 'member'}</span>
+                        {waitingRequest ? <CheckCircle2 size={16} color="var(--success)" /> : <Plus size={16} color="var(--primary)" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {isSharingLocation && !acceptedRequest && (
               <button
                 type="button"
                 className="btn btn-danger"
                 style={stylesShare.stopBtn}
                 onClick={stopLocationSharing}
               >
-                위치 공유 중지
+                위치공유 중지
               </button>
             )}
           </div>
@@ -860,6 +1114,57 @@ export default function App() {
       fontSize: '11px',
       color: 'var(--text-muted)',
       textTransform: 'uppercase',
+    },
+    notice: {
+      padding: '12px 14px',
+      borderRadius: '14px',
+      backgroundColor: 'rgba(245, 158, 11, 0.10)',
+      border: '1px solid rgba(245, 158, 11, 0.25)',
+      color: 'var(--text-secondary)',
+      fontSize: '13px',
+      lineHeight: '1.45',
+    },
+    section: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+    },
+    sectionTitle: {
+      margin: '2px 2px 0',
+      color: 'var(--text-muted)',
+      fontSize: '12px',
+      fontWeight: 800,
+      letterSpacing: 0,
+    },
+    requestCard: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '12px',
+      padding: '12px 14px',
+      borderRadius: '14px',
+      backgroundColor: 'var(--bg-input)',
+      border: '1px solid var(--bg-card-border)',
+      color: 'var(--text-primary)',
+    },
+    requestActions: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      flexShrink: 0,
+    },
+    requestText: {
+      margin: '3px 0 0',
+      color: 'var(--text-secondary)',
+      fontSize: '12px',
+      lineHeight: '1.35',
+    },
+    compactBtn: {
+      minHeight: '34px',
+      padding: '8px 12px',
+      borderRadius: '11px',
+      fontSize: '13px',
+      whiteSpace: 'nowrap',
     },
     emptyText: {
       padding: '16px 4px',
@@ -991,8 +1296,8 @@ export default function App() {
         <button
           className="btn btn-icon map-action-btn"
           onClick={handleOpenLocationSharing}
-          aria-label={isSharingLocation ? '위치 공유 중지' : '팀원에게 위치 공유'}
-          title={isSharingLocation ? '위치 공유 설정' : '팀원에게 위치 공유'}
+          aria-label={isSharingLocation ? '위치공유 설정' : '위치공유 요청'}
+          title={isSharingLocation ? '위치공유 설정' : '위치공유 요청'}
           style={styles.locationShareBtn(isSharingLocation, currentUser?.role === 'admin')}
         >
           <Users size={18} color="#FFFFFF" strokeWidth={2.2} />

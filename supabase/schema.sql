@@ -277,7 +277,7 @@ CREATE TABLE IF NOT EXISTS public.rn_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
     sender_id UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
-    type TEXT NOT NULL CHECK (type IN ('mention')),
+    type TEXT NOT NULL CHECK (type IN ('mention', 'location_share_request', 'location_share_accepted')),
     tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE,
     comment_id UUID REFERENCES public.rn_tip_comments(id) ON DELETE SET NULL,
     message TEXT,
@@ -296,7 +296,39 @@ CREATE POLICY "rn_insert_notifications_for_auth" ON public.rn_notifications
 CREATE POLICY "rn_update_own_notifications" ON public.rn_notifications
     FOR UPDATE USING (auth.uid() = recipient_id);
 
--- 12. Enable Supabase Realtime for custom tables
+-- 12. Location Share Requests Table
+CREATE TABLE IF NOT EXISTS public.rn_location_share_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requester_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    recipient_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'ended', 'canceled')),
+    requested_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    responded_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ DEFAULT (now() + interval '8 hours') NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CHECK (requester_id <> recipient_id)
+);
+
+CREATE INDEX IF NOT EXISTS rn_location_share_requests_requester_idx
+    ON public.rn_location_share_requests (requester_id, status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS rn_location_share_requests_recipient_idx
+    ON public.rn_location_share_requests (recipient_id, status, updated_at DESC);
+
+ALTER TABLE public.rn_location_share_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_own_location_share_requests" ON public.rn_location_share_requests
+    FOR SELECT USING (auth.uid() = requester_id OR auth.uid() = recipient_id);
+
+CREATE POLICY "rn_insert_own_location_share_requests" ON public.rn_location_share_requests
+    FOR INSERT WITH CHECK (auth.uid() = requester_id AND requester_id <> recipient_id);
+
+CREATE POLICY "rn_update_own_location_share_requests" ON public.rn_location_share_requests
+    FOR UPDATE USING (auth.uid() = requester_id OR auth.uid() = recipient_id)
+    WITH CHECK (auth.uid() = requester_id OR auth.uid() = recipient_id);
+
+-- 13. Enable Supabase Realtime for custom tables
 do $$
 begin
   alter publication supabase_realtime add table public.rn_route_tips;
@@ -304,6 +336,7 @@ begin
   alter publication supabase_realtime add table public.rn_route_zone_photos;
   alter publication supabase_realtime add table public.rn_tip_comments;
   alter publication supabase_realtime add table public.rn_notifications;
+  alter publication supabase_realtime add table public.rn_location_share_requests;
 exception when others then
   -- Silently ignore errors if publication doesn't exist or tables are already added
   null;
