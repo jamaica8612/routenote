@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Compass, Locate, LogOut, MapPin, Plus } from 'lucide-react';
+import { Bell, Compass, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -11,8 +11,8 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
-import { isPointInPolygon, findNearbyZone } from './utils/geoUtils';
-import { getDbUserId } from './utils/userUtils';
+import { isPointInPolygon } from './utils/geoUtils';
+import { getDbUserId, isDemoUser } from './utils/userUtils';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -39,7 +39,15 @@ export default function App() {
   const [trackLocationTrigger, setTrackLocationTrigger] = useState(0);
   const [activeRoadviewCoords, setActiveRoadviewCoords] = useState(null);
   
-  const lastAutoOpenedZoneIdRef = useRef(null);
+
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [teamMembers, setTeamMembers] = useState({});
+  const presenceChannelRef = useRef(null);
+  const myLatLngRef = useRef(null);
+
+  // 알림 상태
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -93,6 +101,45 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [currentUser]);
+
+  useEffect(() => {
+    return () => {
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+      }
+    };
+  }, []);
+
+  // 알림 구독
+  useEffect(() => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+
+    const fetchNotifications = async () => {
+      const { data } = await supabase
+        .from('rn_notifications')
+        .select('*')
+        .eq('recipient_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      setNotifications(data || []);
+      setUnreadCount((data || []).filter((n) => !n.is_read).length);
+    };
+    fetchNotifications();
+
+    const notiChannel = supabase
+      .channel(`rn_noti_${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'rn_notifications', filter: `recipient_id=eq.${currentUser.id}` },
+        (payload) => {
+          setNotifications((prev) => [payload.new, ...prev]);
+          setUnreadCount((prev) => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(notiChannel);
   }, [currentUser]);
 
   // Sync open tip details bottom sheet with updates from database
@@ -183,6 +230,22 @@ export default function App() {
       setTips(tipData || []);
     } catch (err) {
       console.error('Error fetching application data:', err);
+    }
+  };
+
+  const handleOpenNotifications = async () => {
+    setSheetTitle('알림');
+    setSheetContent('notifications');
+    setSheetOpen(true);
+    // 읽음 처리
+    if (unreadCount > 0 && currentUser && !isDemoUser(currentUser)) {
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      await supabase
+        .from('rn_notifications')
+        .update({ is_read: true })
+        .eq('recipient_id', currentUser.id)
+        .eq('is_read', false);
     }
   };
 
@@ -298,36 +361,71 @@ export default function App() {
   };
 
   const handleMoveToCurrentLocation = () => {
-    lastAutoOpenedZoneIdRef.current = null; // Clear auto-open block so it forces re-evaluation!
     setTrackLocationTrigger(prev => prev + 1);
   };
 
   const handleLocationUpdate = (lat, lng) => {
-    if (!zones || zones.length === 0) return;
+    // 위치 공유 중이면 Presence 업데이트
+    myLatLngRef.current = { lat, lng };
+    if (isSharingLocation && presenceChannelRef.current) {
+      presenceChannelRef.current.track({
+        user_id: currentUser?.id,
+        name: currentUser?.name || '팀원',
+        lat,
+        lng,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  };
 
-    // Avoid disturbing the user if they are drawing, creating, or editing forms
-    if (isDrawingZone || isDrawingPath || sheetContent === 'zone-form' || sheetContent === 'tip-form' || sheetContent === 'path-form') {
+  const handleToggleLocationSharing = () => {
+    if (isSharingLocation) {
+      presenceChannelRef.current?.untrack();
+      setIsSharingLocation(false);
+      setTeamMembers({});
       return;
     }
 
-    const nearby = findNearbyZone(lat, lng, zones, 150);
+    // 새 채널 생성 (없을 때만)
+    if (!presenceChannelRef.current) {
+      presenceChannelRef.current = supabase.channel('rn_team_presence', {
+        config: { presence: { key: currentUser?.id || 'unknown' } },
+      });
 
-    if (nearby) {
-      const zone = nearby.zone;
-      if (zone.id !== lastAutoOpenedZoneIdRef.current) {
-        lastAutoOpenedZoneIdRef.current = zone.id;
-        setSelectedZone(zone);
-        setSelectedTip(null);
-        
-        // Auto display the zone details bottom sheet
-        setSheetTitle(zone.name);
-        setSheetContent('zone-detail');
-        setSheetOpen(true);
-      }
-    } else {
-      // Reset auto-open trigger block once the user walks away from all zones
-      lastAutoOpenedZoneIdRef.current = null;
+      presenceChannelRef.current
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannelRef.current.presenceState();
+          const members = {};
+          Object.entries(state).forEach(([userId, presences]) => {
+            if (userId !== currentUser?.id && presences.length > 0) {
+              members[userId] = presences[0];
+            }
+          });
+          setTeamMembers(members);
+        })
+        .on('presence', { event: 'leave' }, ({ key }) => {
+          setTeamMembers((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED' && myLatLngRef.current) {
+            await presenceChannelRef.current.track({
+              user_id: currentUser?.id,
+              name: currentUser?.name || '팀원',
+              lat: myLatLngRef.current.lat,
+              lng: myLatLngRef.current.lng,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        });
     }
+
+    setIsSharingLocation(true);
+    // 위치 추적도 자동 시작
+    setTrackLocationTrigger((prev) => prev + 1);
   };
 
   const handleOpenRoadview = (lat, lng) => {
@@ -518,9 +616,50 @@ export default function App() {
             }}
           />
         );
+      case 'notifications':
+        return (
+          <div style={stylesNoti.container}>
+            {notifications.length === 0 && (
+              <p style={stylesNoti.empty}>아직 알림이 없습니다 🔕</p>
+            )}
+            {notifications.map((noti) => (
+              <div key={noti.id} style={{ ...stylesNoti.item, ...(noti.is_read ? {} : stylesNoti.itemUnread) }}>
+                <div style={stylesNoti.icon}>💬</div>
+                <div style={stylesNoti.body}>
+                  <p style={stylesNoti.message}>{noti.message}</p>
+                  <span style={stylesNoti.time}>
+                    {(() => {
+                      const d = new Date(noti.created_at);
+                      const diff = Math.floor((Date.now() - d) / 60000);
+                      if (diff < 1) return '방금 전';
+                      if (diff < 60) return `${diff}분 전`;
+                      if (diff < 1440) return `${Math.floor(diff / 60)}시간 전`;
+                      return `${Math.floor(diff / 1440)}일 전`;
+                    })()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
       default:
         return null;
     }
+  };
+
+  const stylesNoti = {
+    container: { display: 'flex', flexDirection: 'column', gap: '2px', paddingBottom: '8px' },
+    empty: { textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)', padding: '32px 0' },
+    item: {
+      display: 'flex', alignItems: 'flex-start', gap: '12px',
+      padding: '14px 16px', borderRadius: 'var(--radius-md)',
+      backgroundColor: 'transparent', transition: 'background 0.1s',
+    },
+    itemUnread: { backgroundColor: 'rgba(99,102,241,0.07)', borderLeft: '3px solid var(--primary)' },
+    icon: { fontSize: '20px', flexShrink: 0, marginTop: '1px' },
+    body: { display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 },
+    message: { fontSize: '13px', color: 'var(--text-primary)', lineHeight: '1.45', margin: 0 },
+    time: { fontSize: '11px', color: 'var(--text-muted)' },
   };
 
   if (authLoading) {
@@ -586,6 +725,8 @@ export default function App() {
         selectedZone={selectedZone}
         trackLocationTrigger={trackLocationTrigger}
         onLocationUpdate={handleLocationUpdate}
+        teamMembers={teamMembers}
+        isSharingLocation={isSharingLocation}
         onCreateZone={() => {
           setSelectedZone(null);
           setDrawCoords([]);
@@ -614,6 +755,49 @@ export default function App() {
           style={styles.headerLogoutBtn}
         >
           <LogOut size={18} color="#FFFFFF" />
+        </button>
+      )}
+
+      {!isDrawingZone && !isDrawingPath && !isDemoUser(currentUser) && (
+        <button
+          className="btn btn-icon"
+          onClick={handleOpenNotifications}
+          title="알림"
+          style={styles.bellBtn}
+        >
+          <Bell size={18} color="#FFFFFF" />
+          {unreadCount > 0 && (
+            <span style={styles.bellBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
+          )}
+        </button>
+      )}
+
+      {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
+        <button
+          className="btn btn-icon"
+          onClick={handleToggleLocationSharing}
+          title={isSharingLocation ? '위치 공유 중 (탭하여 중지)' : '팀원에게 위치 공유'}
+          style={{
+            position: 'absolute',
+            bottom: '40px',
+            left: isSharingLocation || currentUser?.role === 'admin' ? '68px' : 'auto',
+            right: isSharingLocation || currentUser?.role === 'admin' ? 'auto' : '68px',
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            boxShadow: 'var(--shadow-md)',
+            zIndex: 850,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isSharingLocation ? 'rgba(16, 185, 129, 0.75)' : 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: isSharingLocation ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+            cursor: 'pointer',
+          }}
+        >
+          <Users size={17} color="#FFFFFF" />
         </button>
       )}
 
@@ -661,6 +845,42 @@ const styles = {
     marginTop: '16px',
     color: 'var(--text-secondary)',
     fontWeight: '600',
+  },
+  bellBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '80px',
+    width: '44px',
+    height: '44px',
+    borderRadius: '50%',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    cursor: 'pointer',
+    position: 'absolute',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: '-4px',
+    right: '-4px',
+    minWidth: '18px',
+    height: '18px',
+    borderRadius: '9px',
+    backgroundColor: '#EF4444',
+    color: '#fff',
+    fontSize: '10px',
+    fontWeight: '700',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 4px',
+    border: '1.5px solid var(--bg-app)',
   },
   headerLogoutBtn: {
     position: 'absolute',
