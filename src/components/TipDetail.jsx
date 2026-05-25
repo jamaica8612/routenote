@@ -59,6 +59,11 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const commentsBottomRef = useRef(null);
   const commentChannelRef = useRef(null);
 
+  // @멘션 상태
+  const [memberList, setMemberList] = useState([]);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [showMentionList, setShowMentionList] = useState(false);
+
   useEffect(() => {
     if (!tip) return;
 
@@ -66,6 +71,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     fetchUserNames();
     fetchComments();
     fetchLikes();
+    fetchMembers();
     setShowHistory(false);
 
     // 실시간 댓글 구독
@@ -183,6 +189,19 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     }
   };
 
+  const fetchMembers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rn_profiles')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      setMemberList(data || []);
+    } catch (err) {
+      console.error('멤버 목록 불러오기 실패:', err);
+    }
+  };
+
   const fetchSingleCommentProfile = async (comment) => {
     if (!comment.created_by) return { ...comment, author_name: '알 수 없음' };
     try {
@@ -197,6 +216,27 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     }
   };
 
+  // @멘션 입력 감지
+  const handleCommentInputChange = (e) => {
+    const val = e.target.value;
+    setCommentInput(val);
+    const match = val.match(/@([^\s@]{0,20})$/);
+    if (match) {
+      setMentionSearch(match[1].toLowerCase());
+      setShowMentionList(true);
+    } else {
+      setShowMentionList(false);
+      setMentionSearch('');
+    }
+  };
+
+  // 멘션 선택 시 input에 이름 삽입
+  const handleSelectMention = (member) => {
+    setCommentInput((prev) => prev.replace(/@[^\s@]*$/, `@${member.name} `));
+    setShowMentionList(false);
+    setMentionSearch('');
+  };
+
   const handleSubmitComment = async (e) => {
     e.preventDefault();
     const trimmed = commentInput.trim();
@@ -208,14 +248,35 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
     setSubmittingComment(true);
     try {
-      const { error } = await supabase.from('rn_tip_comments').insert({
-        tip_id: tip.id,
-        content: trimmed,
-        created_by: getDbUserId(currentUser),
-      });
+      // 댓글 등록 + ID 반환
+      const { data: commentData, error } = await supabase
+        .from('rn_tip_comments')
+        .insert({ tip_id: tip.id, content: trimmed, created_by: getDbUserId(currentUser) })
+        .select()
+        .single();
       if (error) throw error;
       setCommentInput('');
-      // Realtime이 자동으로 추가하지만, demo 모드 대비 수동 갱신도 보험으로
+
+      // @멘션 파싱 → 알림 생성
+      const mentionMatches = [...trimmed.matchAll(/@([^\s@]+)/g)];
+      if (mentionMatches.length > 0 && !isDemoUser(currentUser)) {
+        const mentionedNames = mentionMatches.map((m) => m[1].toLowerCase());
+        const mentioned = memberList.filter(
+          (m) => mentionedNames.includes(m.name.toLowerCase()) && m.id !== currentUser?.id
+        );
+        if (mentioned.length > 0) {
+          await supabase.from('rn_notifications').insert(
+            mentioned.map((m) => ({
+              recipient_id: m.id,
+              sender_id: getDbUserId(currentUser),
+              type: 'mention',
+              tip_id: tip.id,
+              comment_id: commentData?.id || null,
+              message: `${currentUser.name}님이 댓글에서 회원님을 멘션했습니다: "${trimmed.slice(0, 60)}${trimmed.length > 60 ? '...' : ''}"`,
+            }))
+          );
+        }
+      }
     } catch (err) {
       alert('댓글 등록 실패: ' + err.message);
     } finally {
@@ -238,6 +299,16 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     } finally {
       setDeletingCommentId(null);
     }
+  };
+
+  // 댓글 내 @멘션 파란색 하이라이트 렌더링
+  const renderMentionHighlight = (content) => {
+    const parts = content.split(/(@\S+)/g);
+    return parts.map((part, i) =>
+      part.startsWith('@')
+        ? <span key={i} style={{ color: 'var(--primary)', fontWeight: 600 }}>{part}</span>
+        : part
+    );
   };
 
   const handleToggleLike = async () => {
@@ -560,7 +631,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
                       </button>
                     )}
                   </div>
-                  <p style={styles.commentContent}>{comment.content}</p>
+                  <p style={styles.commentContent}>{renderMentionHighlight(comment.content)}</p>
                 </div>
               </div>
             );
@@ -570,26 +641,51 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
 
         {/* 댓글 입력창 */}
         {canComment ? (
-          <form onSubmit={handleSubmitComment} style={styles.commentForm}>
-            <input
-              type="text"
-              className="input-field"
-              style={styles.commentInput}
-              placeholder="댓글을 입력하세요... (최대 500자)"
-              value={commentInput}
-              onChange={(e) => setCommentInput(e.target.value)}
-              maxLength={500}
-              disabled={submittingComment}
-            />
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={styles.commentSendBtn}
-              disabled={submittingComment || !commentInput.trim()}
-            >
-              <Send size={16} />
-            </button>
-          </form>
+          <div style={{ position: 'relative' }}>
+            {/* @멘션 자동완성 드롭다운 */}
+            {showMentionList && (
+              <div style={styles.mentionDropdown}>
+                {memberList
+                  .filter((m) => m.name.toLowerCase().includes(mentionSearch) && m.id !== currentUser?.id)
+                  .slice(0, 6)
+                  .map((member) => (
+                    <button
+                      key={member.id}
+                      type="button"
+                      style={styles.mentionItem}
+                      onMouseDown={(e) => { e.preventDefault(); handleSelectMention(member); }}
+                    >
+                      <span style={styles.mentionInitial}>{member.name.charAt(0)}</span>
+                      <span style={styles.mentionName}>{member.name}</span>
+                    </button>
+                  ))}
+                {memberList.filter((m) => m.name.toLowerCase().includes(mentionSearch) && m.id !== currentUser?.id).length === 0 && (
+                  <p style={styles.mentionEmpty}>일치하는 팀원 없음</p>
+                )}
+              </div>
+            )}
+            <form onSubmit={handleSubmitComment} style={styles.commentForm}>
+              <input
+                type="text"
+                className="input-field"
+                style={styles.commentInput}
+                placeholder="댓글을 입력하세요... @이름으로 멘션"
+                value={commentInput}
+                onChange={handleCommentInputChange}
+                onBlur={() => setTimeout(() => setShowMentionList(false), 150)}
+                maxLength={500}
+                disabled={submittingComment}
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={styles.commentSendBtn}
+                disabled={submittingComment || !commentInput.trim()}
+              >
+                <Send size={16} />
+              </button>
+            </form>
+          </div>
         ) : (
           <p style={styles.commentViewerNote}>둘러보기 모드에서는 댓글을 작성할 수 없습니다.</p>
         )}
@@ -666,6 +762,56 @@ const styles = {
     backgroundColor: 'rgba(239, 68, 68, 0.06)',
   },
   actionsContainer: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginTop: '8px' },
+  mentionDropdown: {
+    position: 'absolute',
+    bottom: '52px',
+    left: 0,
+    right: '52px',
+    backgroundColor: 'var(--bg-card)',
+    border: '1px solid var(--bg-card-border)',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: 'var(--shadow-lg)',
+    zIndex: 200,
+    overflow: 'hidden',
+    maxHeight: '180px',
+    overflowY: 'auto',
+  },
+  mentionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '10px 14px',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '1px solid var(--bg-card-border)',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  mentionInitial: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(99,102,241,0.18)',
+    color: 'var(--primary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+  mentionName: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: 'var(--text-primary)',
+  },
+  mentionEmpty: {
+    fontSize: '12px',
+    color: 'var(--text-muted)',
+    padding: '12px 14px',
+    textAlign: 'center',
+  },
   subActions: { display: 'flex', gap: '8px', width: '100%' },
   subBtn: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '12px 8px', fontSize: '13px', whiteSpace: 'nowrap' },
   deleteBtn: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '12px 8px', fontSize: '13px', backgroundColor: 'var(--danger)', color: '#FFFFFF', border: 'none', whiteSpace: 'nowrap' },
