@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Send, MessageCircle } from 'lucide-react';
+import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Send, MessageCircle, Heart } from 'lucide-react';
 import { getDbUserId, isDemoUser } from '../utils/userUtils';
 
 const MARKER_TYPES = {
@@ -46,6 +46,10 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  const [likeCount, setLikeCount] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
+  const [liking, setLiking] = useState(false);
+
   // 댓글 상태
   const [comments, setComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -61,6 +65,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     fetchPhotos();
     fetchUserNames();
     fetchComments();
+    fetchLikes();
     setShowHistory(false);
 
     // 실시간 댓글 구독
@@ -164,6 +169,20 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     }
   };
 
+  const fetchLikes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('rn_tip_likes')
+        .select('id, created_by')
+        .eq('tip_id', tip.id);
+      if (error) throw error;
+      setLikeCount(data?.length || 0);
+      setIsLiked(data?.some(l => l.created_by === currentUser?.id) || false);
+    } catch (err) {
+      console.error('좋아요 불러오기 실패:', err);
+    }
+  };
+
   const fetchSingleCommentProfile = async (comment) => {
     if (!comment.created_by) return { ...comment, author_name: '알 수 없음' };
     try {
@@ -218,6 +237,34 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
       alert('댓글 삭제 실패: ' + err.message);
     } finally {
       setDeletingCommentId(null);
+    }
+  };
+
+  const handleToggleLike = async () => {
+    if (!currentUser || isDemoUser(currentUser) || currentUser.role === 'viewer') return;
+    setLiking(true);
+    try {
+      if (isLiked) {
+        const { error } = await supabase
+          .from('rn_tip_likes')
+          .delete()
+          .eq('tip_id', tip.id)
+          .eq('created_by', currentUser.id);
+        if (error) throw error;
+        setIsLiked(false);
+        setLikeCount(prev => Math.max(0, prev - 1));
+      } else {
+        const { error } = await supabase
+          .from('rn_tip_likes')
+          .insert({ tip_id: tip.id, created_by: currentUser.id });
+        if (error) throw error;
+        setIsLiked(true);
+        setLikeCount(prev => prev + 1);
+      }
+    } catch (err) {
+      alert('좋아요 처리 실패: ' + err.message);
+    } finally {
+      setLiking(false);
     }
   };
 
@@ -395,6 +442,25 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
           <span>최종 확인: <strong>{verifierName || '없음'}</strong> ({formatDate(tip.last_verified_at)})</span>
         </div>
       </div>
+
+      {/* 좋아요 */}
+      <button
+        onClick={handleToggleLike}
+        disabled={liking || !currentUser || currentUser.role === 'viewer' || isDemoUser(currentUser)}
+        style={{
+          ...styles.likeBtn,
+          ...(isLiked ? styles.likeBtnActive : {}),
+        }}
+      >
+        <Heart
+          size={18}
+          color={isLiked ? '#EF4444' : 'var(--text-muted)'}
+          fill={isLiked ? '#EF4444' : 'none'}
+        />
+        <span style={{ fontSize: '13px', fontWeight: '600', color: isLiked ? '#EF4444' : 'var(--text-muted)' }}>
+          {likeCount > 0 ? `${likeCount}명이 도움됐어요` : '도움됐어요'}
+        </span>
+      </button>
 
       {/* 액션 버튼 */}
       <div style={styles.actionsContainer}>
@@ -581,6 +647,24 @@ const styles = {
   tag: { fontSize: '12px', color: 'var(--primary)', fontWeight: '500' },
   metaPanel: { padding: '14px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--bg-card-border)', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' },
   metaRow: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' },
+  likeBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '12px',
+    marginBottom: '16px',
+    borderRadius: 'var(--radius-md)',
+    border: '1.5px solid var(--bg-card-border)',
+    backgroundColor: 'var(--bg-input)',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  likeBtnActive: {
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+  },
   actionsContainer: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginTop: '8px' },
   subActions: { display: 'flex', gap: '8px', width: '100%' },
   subBtn: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '12px 8px', fontSize: '13px', whiteSpace: 'nowrap' },

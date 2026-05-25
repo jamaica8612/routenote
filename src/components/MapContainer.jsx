@@ -80,6 +80,8 @@ export default function MapContainer({
   onFinishDrawingPath,
   trackLocationTrigger,
   onLocationUpdate,
+  teamMembers = {},
+  isSharingLocation = false,
 }) {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
@@ -102,6 +104,7 @@ export default function MapContainer({
   const accuracyCircleRef = useRef(null);
   const streetLayerRef = useRef(null);
   const shouldFollowRef = useRef(true);
+  const teamMemberMarkersRef = useRef({});
 
   useEffect(() => {
     isDrawingZoneRef.current = isDrawingZone;
@@ -210,6 +213,8 @@ export default function MapContainer({
 
     return () => {
       window.naver.maps.Event.clearInstanceListeners(map);
+      Object.values(teamMemberMarkersRef.current).forEach(m => m?.setMap(null));
+      teamMemberMarkersRef.current = {};
     };
   }, [scriptLoaded, setDrawCoords]);
 
@@ -526,6 +531,85 @@ export default function MapContainer({
     setDrawingPolylines(newPolylines);
     setDrawingMarkers(newMarkers);
   }, [drawCoords, isDrawingZone, isDrawingPath, mapInstance]);
+
+  // 팀원 위치 마커 동기화
+  useEffect(() => {
+    if (!mapInstance || !window.naver?.maps) return;
+
+    const currentIds = Object.keys(teamMembers);
+    const existingIds = Object.keys(teamMemberMarkersRef.current);
+
+    // 사라진 팀원 마커 제거
+    existingIds.forEach((id) => {
+      if (!teamMembers[id]) {
+        teamMemberMarkersRef.current[id]?.setMap(null);
+        delete teamMemberMarkersRef.current[id];
+      }
+    });
+
+    // 새 팀원 마커 생성/업데이트
+    currentIds.forEach((id) => {
+      const member = teamMembers[id];
+      if (!member?.lat || !member?.lng) return;
+
+      const position = new window.naver.maps.LatLng(member.lat, member.lng);
+      const name = member.name || '팀원';
+      const initial = name.charAt(0);
+
+      const iconContent = `
+        <div style="
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          pointer-events: none;
+        ">
+          <div style="
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10B981, #059669);
+            border: 2.5px solid #FFFFFF;
+            box-shadow: 0 2px 8px rgba(16,185,129,0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #FFFFFF;
+          ">${initial}</div>
+          <div style="
+            margin-top: 3px;
+            background: rgba(16,185,129,0.92);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 6px;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+            max-width: 72px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          ">${name}</div>
+        </div>
+      `;
+
+      if (teamMemberMarkersRef.current[id]) {
+        teamMemberMarkersRef.current[id].setPosition(position);
+      } else {
+        teamMemberMarkersRef.current[id] = new window.naver.maps.Marker({
+          position,
+          map: mapInstance,
+          icon: {
+            content: iconContent,
+            anchor: new window.naver.maps.Point(16, 16),
+          },
+          zIndex: 800,
+        });
+      }
+    });
+  }, [teamMembers, mapInstance]);
 
   useEffect(() => () => {
     if (locationWatchIdRef.current !== null) navigator.geolocation.clearWatch(locationWatchIdRef.current);
