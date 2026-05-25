@@ -1,17 +1,18 @@
 // Service Worker for RouteNote PWA
-const CACHE_NAME = 'routenote-v2';
-const STATIC_CACHE = 'routenote-static-v2';
+const APP_VERSION = '20260526-v13';
+const CACHE_NAME = `routenote-${APP_VERSION}`;
+const STATIC_CACHE = `routenote-static-${APP_VERSION}`;
 
 // Core assets to cache during install
 const PRECACHE_ASSETS = [
   './',
-  './index.html',
-  './manifest.json',
-  './favicon.svg',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-192-maskable.png',
-  './icon-512-maskable.png'
+  `./index.html?v=${APP_VERSION}`,
+  `./manifest.json?v=${APP_VERSION}`,
+  `./favicon.svg?v=${APP_VERSION}`,
+  './icon-192-v12.png',
+  './icon-512-v12.png',
+  './icon-192-maskable-v12.png',
+  './icon-512-maskable-v12.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -37,6 +38,12 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
