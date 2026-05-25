@@ -251,12 +251,34 @@ CREATE POLICY "rn_read_zone_photos_for_all" ON public.rn_route_zone_photos
 CREATE POLICY "rn_write_zone_photos_for_auth" ON public.rn_route_zone_photos
     FOR ALL USING (auth.role() = 'authenticated');
 
--- 10. Enable Supabase Realtime for custom tables
+-- 10. Tip Comments Table (팁 댓글)
+CREATE TABLE IF NOT EXISTS public.rn_tip_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE NOT NULL,
+    content TEXT NOT NULL CHECK (char_length(content) > 0 AND char_length(content) <= 500),
+    created_by UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    is_deleted BOOLEAN DEFAULT false
+);
+
+ALTER TABLE public.rn_tip_comments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_comments_for_auth" ON public.rn_tip_comments
+    FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "rn_insert_comments_for_auth" ON public.rn_tip_comments
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "rn_update_own_comment" ON public.rn_tip_comments
+    FOR UPDATE USING (auth.uid() = created_by OR public.rn_is_admin(auth.uid()));
+
+-- 11. Enable Supabase Realtime for custom tables
 do $$
 begin
   alter publication supabase_realtime add table public.rn_route_tips;
   alter publication supabase_realtime add table public.rn_route_zones;
   alter publication supabase_realtime add table public.rn_route_zone_photos;
+  alter publication supabase_realtime add table public.rn_tip_comments;
 exception when others then
   -- Silently ignore errors if publication doesn't exist or tables are already added
   null;
