@@ -169,6 +169,23 @@ body, html, #root {
   flex-shrink: 0;
 }
 
+.map-action-btn {
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.map-action-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.map-action-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
 /* Input Fields styling */
 .input-group {
   display: flex;

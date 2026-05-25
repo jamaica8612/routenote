@@ -749,23 +749,25 @@ export default function App() {
 
       {!isDrawingZone && !isDrawingPath && (
         <button
-          className="btn btn-icon"
+          className="btn btn-icon map-action-btn"
           onClick={handleLogout}
+          aria-label="로그아웃"
           title="로그아웃"
           style={styles.headerLogoutBtn}
         >
-          <LogOut size={18} color="#FFFFFF" />
+          <LogOut size={19} color="#FFFFFF" strokeWidth={2.2} />
         </button>
       )}
 
       {!isDrawingZone && !isDrawingPath && !isDemoUser(currentUser) && (
         <button
-          className="btn btn-icon"
+          className="btn btn-icon map-action-btn"
           onClick={handleOpenNotifications}
+          aria-label={`알림${unreadCount > 0 ? ` ${unreadCount}개` : ''}`}
           title="알림"
           style={styles.bellBtn}
         >
-          <Bell size={18} color="#FFFFFF" />
+          <Bell size={19} color="#FFFFFF" strokeWidth={2.2} />
           {unreadCount > 0 && (
             <span style={styles.bellBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
           )}
@@ -774,41 +776,26 @@ export default function App() {
 
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
-          className="btn btn-icon"
+          className="btn btn-icon map-action-btn"
           onClick={handleToggleLocationSharing}
+          aria-label={isSharingLocation ? '위치 공유 중지' : '팀원에게 위치 공유'}
           title={isSharingLocation ? '위치 공유 중 (탭하여 중지)' : '팀원에게 위치 공유'}
-          style={{
-            position: 'absolute',
-            bottom: '40px',
-            left: isSharingLocation || currentUser?.role === 'admin' ? '68px' : 'auto',
-            right: isSharingLocation || currentUser?.role === 'admin' ? 'auto' : '68px',
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            boxShadow: 'var(--shadow-md)',
-            zIndex: 850,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: isSharingLocation ? 'rgba(16, 185, 129, 0.75)' : 'rgba(15, 23, 42, 0.45)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            border: isSharingLocation ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-            cursor: 'pointer',
-          }}
+          style={styles.locationShareBtn(isSharingLocation, currentUser?.role === 'admin')}
         >
-          <Users size={17} color="#FFFFFF" />
+          <Users size={18} color="#FFFFFF" strokeWidth={2.2} />
+          {isSharingLocation && <span style={styles.liveDot} />}
         </button>
       )}
 
       {!isDrawingZone && !isDrawingPath && (
         <button
-          className="btn btn-icon"
+          className="btn btn-icon map-action-btn"
           onClick={handleMoveToCurrentLocation}
+          aria-label="현재 위치로 지도 이동"
           title="현재 위치로 지도 이동"
           style={styles.floatingCompassBtn(currentUser?.role === 'admin')}
         >
-          <Locate size={18} color="#FFFFFF" />
+          <Locate size={19} color="#FFFFFF" strokeWidth={2.2} />
         </button>
       )}
 
@@ -849,74 +836,109 @@ const styles = {
   bellBtn: {
     position: 'absolute',
     top: '16px',
-    right: '80px',
-    width: '44px',
-    height: '44px',
-    borderRadius: '50%',
-    boxShadow: 'var(--shadow-md)',
+    right: '76px',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.24)',
     zIndex: 900,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.78), rgba(15, 23, 42, 0.62))',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(255, 255, 255, 0.16)',
     cursor: 'pointer',
-    position: 'absolute',
   },
   bellBadge: {
     position: 'absolute',
-    top: '-4px',
-    right: '-4px',
-    minWidth: '18px',
-    height: '18px',
-    borderRadius: '9px',
-    backgroundColor: '#EF4444',
+    top: '-5px',
+    right: '-5px',
+    minWidth: '19px',
+    height: '19px',
+    borderRadius: '999px',
+    background: 'linear-gradient(135deg, #F43F5E, #EF4444)',
     color: '#fff',
     fontSize: '10px',
-    fontWeight: '700',
+    fontWeight: '800',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '0 4px',
-    border: '1.5px solid var(--bg-app)',
+    border: '2px solid rgba(15, 23, 42, 0.88)',
+    boxShadow: '0 6px 14px rgba(239, 68, 68, 0.32)',
   },
   headerLogoutBtn: {
     position: 'absolute',
     top: '16px',
     right: '16px',
-    width: '54px',
-    height: '54px',
-    borderRadius: 'var(--radius-md)',
-    boxShadow: 'var(--shadow-md)',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.24)',
     zIndex: 900,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.78), rgba(15, 23, 42, 0.62))',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(255, 255, 255, 0.16)',
     cursor: 'pointer',
+  },
+  locationShareBtn: (isSharing, isAdmin) => ({
+    position: 'absolute',
+    bottom: '40px',
+    left: isSharing || isAdmin ? '70px' : 'auto',
+    right: isSharing || isAdmin ? 'auto' : '70px',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: isSharing
+      ? '0 14px 30px rgba(16, 185, 129, 0.26)'
+      : '0 12px 28px rgba(15, 23, 42, 0.22)',
+    zIndex: 850,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: isSharing
+      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.96), rgba(5, 150, 105, 0.86))'
+      : 'linear-gradient(180deg, rgba(17, 24, 39, 0.72), rgba(15, 23, 42, 0.54))',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: isSharing
+      ? '1px solid rgba(167, 243, 208, 0.46)'
+      : '1px solid rgba(255, 255, 255, 0.14)',
+    cursor: 'pointer',
+  }),
+  liveDot: {
+    position: 'absolute',
+    top: '8px',
+    right: '8px',
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    backgroundColor: '#ECFDF5',
+    boxShadow: '0 0 0 4px rgba(236, 253, 245, 0.20)',
   },
   floatingCompassBtn: (isAdmin) => ({
     position: 'absolute',
     bottom: '40px',
     left: isAdmin ? '16px' : 'auto',
     right: isAdmin ? 'auto' : '16px',
-    width: '44px',
-    height: '44px',
-    borderRadius: '50%',
-    boxShadow: 'var(--shadow-md)',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.22)',
     zIndex: 850,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.72), rgba(15, 23, 42, 0.54))',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(255, 255, 255, 0.14)',
     cursor: 'pointer',
   }),
   menuContainer: {
