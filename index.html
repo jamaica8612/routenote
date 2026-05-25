@@ -2,13 +2,13 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=20260526-v16" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=20260526-v17" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="배송 기사들을 위한 스마트 구역 매핑 및 배송 팁 마커 관리 웹 서비스, 구역노트(Route Note)입니다." />
     
     <!-- PWA Settings -->
-    <link rel="manifest" href="./manifest.json?v=20260526-v16" />
-    <meta name="theme-color" content="#0B0F19" />
+    <link rel="manifest" href="./manifest.json?v=20260526-v17" />
+    <meta name="theme-color" content="#F9FAFB" />
     
     <!-- iOS Mobile Web App Settings -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,10 +22,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     
     <title>구역노트 - Route Note</title>
-    <script type="module" crossorigin src="./assets/index-CGs-XHsi.js"></script>
+    <script type="module" crossorigin src="./assets/index-BRYm51sw.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-QTnfLwEv.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-he-LPOAL.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-BwOj7WGb.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-GLeZmiFR.css">
   </head>
   <body>
     <div id="root"></div>
@@ -57,8 +57,8 @@
             'align-items:center',
             'justify-content:center',
             'padding:24px',
-            'background:#0B0F19',
-            'color:#FFFFFF',
+            'background:#F9FAFB',
+            'color:#111827',
             'font-size:16px',
             'font-weight:700',
             'text-align:center',
@@ -75,7 +75,7 @@
         });
 
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=20260526-v16')
+          navigator.serviceWorker.register('./sw.js?v=20260526-v17')
             .then((reg) => {
               console.log('Service Worker registered:', reg.scope);
               reg.update();

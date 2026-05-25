@@ -1,5 +1,5 @@
 // Service Worker for RouteNote PWA
-const APP_VERSION = '20260526-v16';
+const APP_VERSION = '20260526-v17';
 const CACHE_NAME = `routenote-${APP_VERSION}`;
 const STATIC_CACHE = `routenote-static-${APP_VERSION}`;
 
