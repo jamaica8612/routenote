@@ -2,19 +2,19 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=20260526-v18" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="배송 기사들을 위한 스마트 구역 매핑 및 배송 팁 마커 관리 웹 서비스, 구역노트(Route Note)입니다." />
     
     <!-- PWA Settings -->
-    <link rel="manifest" href="./manifest.json?v=20260526-v18" />
+    <link rel="manifest" href="./manifest.json" />
     <meta name="theme-color" content="#F9FAFB" />
     
     <!-- iOS Mobile Web App Settings -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="구역노트" />
-    <link rel="apple-touch-icon" href="./icon-192-v12.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
     
     <!-- Google Fonts Preconnect & Stylesheet -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -22,76 +22,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     
     <title>구역노트 - Route Note</title>
-    <script type="module" crossorigin src="./assets/index-BShXq7vX.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-QTnfLwEv.js">
-    <link rel="modulepreload" crossorigin href="./assets/vendor-he-LPOAL.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-GLeZmiFR.css">
+    <script type="module" crossorigin src="./assets/index-D7aVnxZ3.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-Bh1tDfsg.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-DknFFZcp.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-B6GJTwnn.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
     
     <!-- Register Service Worker -->
     <script>
-      const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
-      if ('serviceWorker' in navigator && isLocalhost) {
-        navigator.serviceWorker.getRegistrations()
-          .then((registrations) => registrations.forEach((registration) => registration.unregister()))
-          .catch((err) => console.error('Service Worker cleanup failed:', err));
-      }
-
-      if ('serviceWorker' in navigator && !isLocalhost) {
-        let refreshing = false;
-        const showUpdatingMessage = () => {
-          if (document.getElementById('pwa-update-overlay')) return;
-
-          const overlay = document.createElement('div');
-          overlay.id = 'pwa-update-overlay';
-          overlay.setAttribute('role', 'status');
-          overlay.setAttribute('aria-live', 'polite');
-          overlay.textContent = '업데이트 중입니다. 잠시만 기다려주세요...';
-          overlay.style.cssText = [
-            'position:fixed',
-            'inset:0',
-            'z-index:99999',
-            'display:flex',
-            'align-items:center',
-            'justify-content:center',
-            'padding:24px',
-            'background:#F9FAFB',
-            'color:#111827',
-            'font-size:16px',
-            'font-weight:700',
-            'text-align:center',
-            'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
-          ].join(';');
-          document.body.appendChild(overlay);
-        };
-
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (refreshing) return;
-          refreshing = true;
-          showUpdatingMessage();
-          window.location.reload();
-        });
-
+      if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js?v=20260526-v18')
-            .then((reg) => {
-              console.log('Service Worker registered:', reg.scope);
-              reg.update();
-
-              reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                if (!newWorker) return;
-
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    showUpdatingMessage();
-                    newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  }
-                });
-              });
-            })
+          navigator.serviceWorker.register('./sw.js')
+            .then((reg) => console.log('Service Worker registered:', reg.scope))
             .catch((err) => console.error('Service Worker registration failed:', err));
         });
       }

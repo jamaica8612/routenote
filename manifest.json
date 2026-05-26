@@ -3,23 +3,23 @@
   "name": "구역노트 - 배송지도 및 동선 가이드",
   "icons": [
     {
-      "src": "icon-192-v12.png",
+      "src": "icon-192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "icon-512-v12.png",
+      "src": "icon-512.png",
       "type": "image/png",
       "sizes": "512x512"
     },
     {
-      "src": "icon-192-maskable-v12.png",
+      "src": "icon-192-maskable.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "maskable"
     },
     {
-      "src": "icon-512-maskable-v12.png",
+      "src": "icon-512-maskable.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
