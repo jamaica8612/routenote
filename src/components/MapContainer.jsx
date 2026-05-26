@@ -824,7 +824,7 @@ export default function MapContainer({
           onClick={handleToggleRoadviewMode}
           title="로드뷰 모드"
         >
-          <MapIcon size={17} color="#FFFFFF" />
+          <MapIcon size={17} color="var(--text-primary)" />
           <span>로드뷰</span>
         </button>
       )}
@@ -945,7 +945,7 @@ const styles = {
     width: '100%',
     height: '100%',
     zIndex: 999,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F9FAFB',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -961,9 +961,9 @@ const styles = {
     minWidth: '82px',
     height: '42px',
     borderRadius: '999px',
-    border: '1px solid rgba(255, 255, 255, 0.14)',
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
-    color: '#FFFFFF',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

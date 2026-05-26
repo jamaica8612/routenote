@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { MapPin, UserPlus, UserCheck, UserX, X, Navigation } from 'lucide-react';
+import { MapPin, Navigation, UserPlus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 export default function LocationSharingPanel({
@@ -56,18 +56,16 @@ export default function LocationSharingPanel({
     onSharesChanged(newShares.filter(s => s.status === 'accepted'));
   };
 
-  const getPartner = (share) => {
-    return share.requester_id === currentUser.id ? share.recipient : share.requester;
-  };
+  const getPartner = (share) =>
+    share.requester_id === currentUser.id ? share.recipient : share.requester;
 
   const getInitial = (name) => (name || '?').charAt(0).toUpperCase();
 
-  const hasActiveShare = (memberId) => {
-    return shares.some(s =>
+  const hasActiveShare = (memberId) =>
+    shares.some(s =>
       (s.requester_id === memberId || s.recipient_id === memberId) &&
       (s.status === 'pending' || s.status === 'accepted')
     );
-  };
 
   const handleSendRequest = async (memberId) => {
     setSendingTo(memberId);
@@ -133,147 +131,143 @@ export default function LocationSharingPanel({
 
   if (loading) {
     return (
-      <div style={styles.center}>
-        <span style={styles.loadingText}>불러오는 중...</span>
+      <div style={styles.emptyWrap}>
+        <p style={styles.emptyText}>불러오는 중...</p>
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      {/* GPS Status */}
+      {/* GPS 상태 바 */}
       {activeSharesList.length > 0 && (
-        <div style={styles.gpsSection}>
-          <div style={styles.gpsBanner}>
-            <Navigation size={16} color={isSharingLocation ? '#10B981' : '#9CA3AF'} />
-            <span style={{ fontSize: '13px', color: isSharingLocation ? '#10B981' : 'var(--text-secondary)', fontWeight: 600 }}>
-              {isSharingLocation ? 'GPS 공유 중' : 'GPS 꺼짐'}
+        <div className="glass" style={styles.gpsCard}>
+          <div style={styles.gpsRow}>
+            <Navigation size={15} color={isSharingLocation ? 'var(--success)' : 'var(--text-muted)'} />
+            <span style={{ fontSize: '13px', fontWeight: 600, color: isSharingLocation ? 'var(--success)' : 'var(--text-secondary)' }}>
+              {isSharingLocation ? 'GPS 공유 중' : 'GPS 꺼짐 — 상대에게 내 위치가 보이지 않습니다'}
             </span>
-            <button
-              style={{
-                ...styles.smallBtn,
-                background: isSharingLocation ? 'var(--danger)' : 'var(--success)',
-                color: '#fff',
-                marginLeft: 'auto',
-              }}
-              onClick={isSharingLocation ? onStopGps : onStartGps}
-            >
-              {isSharingLocation ? '중지' : '시작'}
-            </button>
           </div>
+          <button
+            className={isSharingLocation ? 'btn btn-danger' : 'btn btn-primary'}
+            style={styles.gpsBtn}
+            onClick={isSharingLocation ? onStopGps : onStartGps}
+          >
+            {isSharingLocation ? 'GPS 중지' : 'GPS 시작'}
+          </button>
         </div>
       )}
 
-      {/* Incoming Requests */}
+      {/* 받은 요청 */}
       {incomingRequests.length > 0 && (
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>받은 요청</h4>
+        <Section title="받은 요청" count={incomingRequests.length}>
           {incomingRequests.map(share => {
             const partner = getPartner(share);
             return (
               <div key={share.id} style={styles.row}>
-                <div style={styles.avatar}>{getInitial(partner?.name)}</div>
+                <div style={styles.initial}>{getInitial(partner?.name)}</div>
                 <div style={styles.info}>
                   <span style={styles.name}>{partner?.name || partner?.email}</span>
-                  <span style={styles.sub}>위치 공유 요청</span>
+                  <span style={styles.sub}>위치 공유를 요청했습니다</span>
                 </div>
-                <button style={{ ...styles.actionBtn, background: 'var(--success)', color: '#fff' }} onClick={() => handleAccept(share.id)}>
-                  <UserCheck size={15} />
-                  <span>수락</span>
-                </button>
-                <button style={{ ...styles.actionBtn, background: 'var(--bg-card-border)', color: 'var(--text-primary)' }} onClick={() => handleReject(share.id)}>
-                  <UserX size={15} />
-                </button>
+                <div style={styles.rowActions}>
+                  <button className="btn btn-primary" style={styles.rowBtn} onClick={() => handleAccept(share.id)}>수락</button>
+                  <button className="btn btn-secondary" style={styles.rowBtnSmall} onClick={() => handleReject(share.id)}>거절</button>
+                </div>
               </div>
             );
           })}
-        </div>
+        </Section>
       )}
 
-      {/* Active Shares */}
+      {/* 공유 중 */}
       {activeSharesList.length > 0 && (
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>공유 중</h4>
+        <Section title="공유 중">
           {activeSharesList.map(share => {
             const partner = getPartner(share);
             return (
               <div key={share.id} style={styles.row}>
-                <div style={{ ...styles.avatar, background: 'linear-gradient(135deg, #10B981, #059669)' }}>
+                <div style={{ ...styles.initial, backgroundColor: 'rgba(16,185,129,0.15)', color: 'var(--success)' }}>
                   {getInitial(partner?.name)}
                 </div>
                 <div style={styles.info}>
                   <span style={styles.name}>{partner?.name || partner?.email}</span>
-                  <span style={{ ...styles.sub, color: 'var(--success)' }}>서로 위치 공유 중</span>
+                  <span style={{ ...styles.statusTag, backgroundColor: 'rgba(16,185,129,0.12)', color: 'var(--success)' }}>서로 공유 중</span>
                 </div>
-                <button
-                  style={{ ...styles.actionBtn, background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' }}
-                  onClick={() => handleEnd(share.id)}
-                >
-                  <X size={15} />
+                <button className="btn btn-secondary" style={styles.rowBtnSmall} onClick={() => handleEnd(share.id)}>
+                  <X size={14} />
                   <span>종료</span>
                 </button>
               </div>
             );
           })}
-        </div>
+        </Section>
       )}
 
-      {/* Outgoing Pending */}
+      {/* 보낸 요청 */}
       {outgoingPending.length > 0 && (
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>보낸 요청</h4>
+        <Section title="보낸 요청">
           {outgoingPending.map(share => {
             const partner = getPartner(share);
             return (
               <div key={share.id} style={styles.row}>
-                <div style={{ ...styles.avatar, background: 'var(--warning)' }}>
+                <div style={{ ...styles.initial, backgroundColor: 'rgba(245,158,11,0.15)', color: 'var(--warning)' }}>
                   {getInitial(partner?.name)}
                 </div>
                 <div style={styles.info}>
                   <span style={styles.name}>{partner?.name || partner?.email}</span>
-                  <span style={{ ...styles.sub, color: 'var(--warning)' }}>대기 중...</span>
+                  <span style={{ ...styles.statusTag, backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--warning)' }}>대기 중</span>
                 </div>
-                <button
-                  style={{ ...styles.actionBtn, background: 'var(--bg-card-border)', color: 'var(--text-muted)' }}
-                  onClick={() => handleEnd(share.id)}
-                >
-                  <X size={15} />
-                </button>
+                <button className="btn btn-secondary" style={styles.rowBtnSmall} onClick={() => handleEnd(share.id)}>취소</button>
               </div>
             );
           })}
-        </div>
+        </Section>
       )}
 
-      {/* Available Members */}
+      {/* 팀원 목록 */}
       {availableMembers.length > 0 && (
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>팀원</h4>
+        <Section title="팀원">
           {availableMembers.map(member => (
             <div key={member.id} style={styles.row}>
-              <div style={styles.avatar}>{getInitial(member.name)}</div>
+              <div style={styles.initial}>{getInitial(member.name)}</div>
               <div style={styles.info}>
                 <span style={styles.name}>{member.name || member.email}</span>
               </div>
               <button
-                style={{ ...styles.actionBtn, background: 'var(--primary)', color: '#fff' }}
+                className="btn btn-secondary"
+                style={styles.rowBtn}
                 disabled={sendingTo === member.id}
                 onClick={() => handleSendRequest(member.id)}
               >
-                <UserPlus size={15} />
+                <UserPlus size={14} />
                 <span>{sendingTo === member.id ? '...' : '요청'}</span>
               </button>
             </div>
           ))}
-        </div>
+        </Section>
       )}
 
       {members.length === 0 && shares.length === 0 && (
-        <div style={styles.center}>
-          <MapPin size={32} color="var(--text-muted)" />
+        <div style={styles.emptyWrap}>
+          <MapPin size={28} color="var(--text-muted)" />
           <p style={styles.emptyText}>공유할 팀원이 없습니다</p>
         </div>
       )}
+
+      <div style={{ height: '12px', flexShrink: 0 }} />
+    </div>
+  );
+}
+
+function Section({ title, count, children }) {
+  return (
+    <div style={styles.section}>
+      <div style={styles.sectionHeader}>
+        <span style={styles.sectionTitle}>{title}</span>
+        {count > 0 && <span style={styles.sectionCount}>{count}</span>}
+      </div>
+      {children}
     </div>
   );
 }
@@ -282,66 +276,92 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-    paddingBottom: '16px',
+    gap: '8px',
   },
-  center: {
+  emptyWrap: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '12px',
-    padding: '40px 0',
-  },
-  loadingText: {
-    fontSize: '14px',
-    color: 'var(--text-muted)',
+    gap: '10px',
+    padding: '36px 0',
   },
   emptyText: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: 'var(--text-muted)',
+    textAlign: 'center',
   },
-  gpsSection: {
-    padding: '0 0 8px',
+
+  // GPS 카드
+  gpsCard: {
+    padding: '14px 16px',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--bg-card-border)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    marginBottom: '4px',
   },
-  gpsBanner: {
+  gpsRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: '10px 14px',
-    borderRadius: '12px',
-    background: 'var(--bg-input)',
-    border: '1px solid var(--bg-card-border)',
   },
+  gpsBtn: {
+    width: '100%',
+    padding: '10px',
+    fontSize: '13px',
+    minHeight: '40px',
+  },
+
+  // 섹션
   section: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
-    marginTop: '8px',
+    gap: '4px',
+    marginTop: '4px',
+  },
+  sectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 4px 6px',
   },
   sectionTitle: {
+    fontSize: '15px',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
+  sectionCount: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '20px',
+    height: '20px',
+    padding: '0 6px',
+    borderRadius: '10px',
+    backgroundColor: 'var(--primary)',
+    color: '#fff',
     fontSize: '11px',
     fontWeight: 700,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    padding: '4px 4px 8px',
-    margin: 0,
   },
+
+  // 행
   row: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '10px 8px',
-    borderRadius: '12px',
-    transition: 'background 0.1s',
+    padding: '12px 14px',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg-input)',
+    border: '1px solid var(--bg-card-border)',
   },
-  avatar: {
-    width: '36px',
-    height: '36px',
+  initial: {
+    width: '34px',
+    height: '34px',
     borderRadius: '50%',
-    background: 'var(--primary)',
-    color: '#fff',
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    color: 'var(--primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -353,7 +373,7 @@ const styles = {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
+    gap: '3px',
     minWidth: 0,
   },
   name: {
@@ -367,29 +387,39 @@ const styles = {
   sub: {
     fontSize: '12px',
     color: 'var(--text-muted)',
+    lineHeight: 1.3,
   },
-  actionBtn: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '6px 12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '12px',
+  statusTag: {
+    display: 'inline-block',
+    alignSelf: 'flex-start',
+    fontSize: '11px',
     fontWeight: 600,
-    cursor: 'pointer',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  rowActions: {
+    display: 'flex',
+    gap: '6px',
     flexShrink: 0,
-    transition: 'opacity 0.15s',
   },
-  smallBtn: {
+  rowBtn: {
+    padding: '7px 14px',
+    fontSize: '12px',
+    fontWeight: 600,
+    minHeight: '34px',
+    borderRadius: 'var(--radius-sm)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+  },
+  rowBtnSmall: {
+    padding: '7px 10px',
+    fontSize: '12px',
+    fontWeight: 600,
+    minHeight: '34px',
+    borderRadius: 'var(--radius-sm)',
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '5px 12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
   },
 };

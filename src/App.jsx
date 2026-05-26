@@ -832,7 +832,7 @@ export default function App() {
           title="로그아웃"
           style={styles.headerLogoutBtn}
         >
-          <LogOut size={18} color="#FFFFFF" />
+          <LogOut size={18} color="var(--text-primary)" />
         </button>
       )}
 
@@ -843,7 +843,7 @@ export default function App() {
           title="알림"
           style={styles.bellBtn}
         >
-          <Bell size={18} color="#FFFFFF" />
+          <Bell size={18} color="var(--text-primary)" />
           {unreadCount > 0 && (
             <span style={styles.bellBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
           )}
@@ -868,14 +868,14 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: activeShares.length > 0 ? 'rgba(16, 185, 129, 0.75)' : 'rgba(15, 23, 42, 0.45)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            border: activeShares.length > 0 ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+            backgroundColor: activeShares.length > 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: activeShares.length > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(0, 0, 0, 0.08)',
             cursor: 'pointer',
           }}
         >
-          <Users size={17} color="#FFFFFF" />
+          <Users size={17} color={activeShares.length > 0 ? '#FFFFFF' : 'var(--text-primary)'} />
         </button>
       )}
 
@@ -886,7 +886,7 @@ export default function App() {
           title="현재 위치로 지도 이동"
           style={styles.floatingCompassBtn(currentUser?.role === 'admin')}
         >
-          <Locate size={18} color="#FFFFFF" />
+          <Locate size={18} color="var(--text-primary)" />
         </button>
       )}
 
@@ -936,12 +936,11 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
     cursor: 'pointer',
-    position: 'absolute',
   },
   bellBadge: {
     position: 'absolute',
@@ -972,10 +971,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
     cursor: 'pointer',
   },
   floatingCompassBtn: (isAdmin) => ({
@@ -991,10 +990,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
     cursor: 'pointer',
   }),
   menuContainer: {

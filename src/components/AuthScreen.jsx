@@ -149,7 +149,7 @@ const styles = {
     width: '100%',
     height: '100%',
     padding: '24px',
-    backgroundColor: '#0B0F19', // Dark background override
+    backgroundColor: 'var(--bg-app)',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -158,7 +158,7 @@ const styles = {
     width: '300px',
     height: '300px',
     borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(0,0,0,0) 70%)',
+    background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, rgba(0,0,0,0) 70%)',
     top: '10%',
     left: '10%',
     zIndex: 0,
@@ -168,7 +168,7 @@ const styles = {
     width: '400px',
     height: '400px',
     borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(0,0,0,0) 70%)',
+    background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, rgba(0,0,0,0) 70%)',
     bottom: '10%',
     right: '10%',
     zIndex: 0,
@@ -180,11 +180,11 @@ const styles = {
     borderRadius: '24px',
     textAlign: 'center',
     zIndex: 1,
-    boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
-    background: 'rgba(22, 28, 45, 0.7)',
+    boxShadow: 'var(--shadow-lg)',
+    background: 'var(--bg-card)',
     backdropFilter: 'blur(16px)',
     WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    border: '1px solid var(--bg-card-border)',
   },
   logoContainer: {
     marginBottom: '32px',
@@ -203,7 +203,7 @@ const styles = {
   title: {
     fontSize: '28px',
     fontWeight: '700',
-    color: '#F3F4F6',
+    color: 'var(--text-primary)',
     letterSpacing: '-0.02em',
   },
   subtitle: {
@@ -232,7 +232,7 @@ const styles = {
   featureTitle: {
     fontSize: '15px',
     fontWeight: '600',
-    color: '#F3F4F6',
+    color: 'var(--text-primary)',
     marginBottom: '2px',
   },
   featureDesc: {
@@ -263,7 +263,7 @@ const styles = {
     height: '52px',
     backgroundColor: '#121824',
     border: '1.5px solid rgba(255, 255, 255, 0.08)',
-    color: '#F3F4F6',
+    color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -307,7 +307,7 @@ const styles = {
     borderRadius: '10px',
     fontWeight: '500',
     backgroundColor: '#121824',
-    color: '#F3F4F6',
+    color: 'var(--text-primary)',
     border: '1px solid rgba(255, 255, 255, 0.08)',
   },
 };
