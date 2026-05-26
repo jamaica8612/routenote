@@ -386,7 +386,7 @@ export default function MapContainer({
               justify-content: center;
               font-size: 28px;
               opacity: ${opacity};
-              filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+              filter: drop-shadow(0 2px 4px rgba(71,85,105,0.22));
               transition: all 0.2s;
               cursor: pointer;
             ">${markerType.emoji}</div>
@@ -456,7 +456,7 @@ export default function MapContainer({
                   border-radius: 50%;
                   font-size: 12px;
                   font-weight: 700;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                  box-shadow: 0 2px 6px rgba(71,85,105,0.24);
                 ">${index + 1}</div>
               `,
               anchor: new window.naver.maps.Point(12, 12),
@@ -587,7 +587,7 @@ export default function MapContainer({
             padding: 2px 6px;
             border-radius: 6px;
             white-space: nowrap;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+            box-shadow: 0 1px 4px rgba(71,85,105,0.2);
             max-width: 72px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -816,7 +816,7 @@ export default function MapContainer({
           onClick={handleToggleRoadviewMode}
           title="로드뷰 모드"
         >
-          <MapIcon size={17} color="#FFFFFF" />
+          <MapIcon size={17} color={roadviewMode ? '#FFFFFF' : 'var(--text-primary)'} />
           <span>로드뷰</span>
         </button>
       )}
@@ -937,7 +937,7 @@ const styles = {
     width: '100%',
     height: '100%',
     zIndex: 999,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F9FAFB',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -953,9 +953,9 @@ const styles = {
     minWidth: '82px',
     height: '42px',
     borderRadius: '999px',
-    border: '1px solid rgba(255, 255, 255, 0.14)',
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
-    color: '#FFFFFF',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    color: 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

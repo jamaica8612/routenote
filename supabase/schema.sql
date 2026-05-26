@@ -256,23 +256,51 @@ CREATE TABLE IF NOT EXISTS public.rn_tip_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE NOT NULL,
     content TEXT NOT NULL CHECK (char_length(content) > 0 AND char_length(content) <= 500),
-    created_by UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    is_deleted BOOLEAN DEFAULT false
+    created_by UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    is_deleted BOOLEAN DEFAULT false NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS rn_tip_comments_tip_idx
+    ON public.rn_tip_comments (tip_id, created_at);
 
 ALTER TABLE public.rn_tip_comments ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "rn_read_comments_for_auth" ON public.rn_tip_comments
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "rn_insert_comments_for_auth" ON public.rn_tip_comments
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "rn_insert_own_comments" ON public.rn_tip_comments
+    FOR INSERT WITH CHECK (auth.uid() = created_by);
 
 CREATE POLICY "rn_update_own_comment" ON public.rn_tip_comments
-    FOR UPDATE USING (auth.uid() = created_by OR public.rn_is_admin(auth.uid()));
+    FOR UPDATE USING (auth.uid() = created_by OR public.rn_is_admin(auth.uid()))
+    WITH CHECK (auth.uid() = created_by OR public.rn_is_admin(auth.uid()));
 
 -- 11. Notifications Table (알림)
+-- 11. Tip Likes Table
+CREATE TABLE IF NOT EXISTS public.rn_tip_likes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE NOT NULL,
+    created_by UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    UNIQUE (tip_id, created_by)
+);
+
+CREATE INDEX IF NOT EXISTS rn_tip_likes_tip_idx
+    ON public.rn_tip_likes (tip_id);
+
+ALTER TABLE public.rn_tip_likes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_likes_for_auth" ON public.rn_tip_likes
+    FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "rn_insert_own_likes" ON public.rn_tip_likes
+    FOR INSERT WITH CHECK (auth.uid() = created_by);
+
+CREATE POLICY "rn_delete_own_likes" ON public.rn_tip_likes
+    FOR DELETE USING (auth.uid() = created_by);
+
+-- 12. Notifications Table
 CREATE TABLE IF NOT EXISTS public.rn_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
@@ -281,9 +309,12 @@ CREATE TABLE IF NOT EXISTS public.rn_notifications (
     tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE,
     comment_id UUID REFERENCES public.rn_tip_comments(id) ON DELETE SET NULL,
     message TEXT,
-    is_read BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT now()
+    is_read BOOLEAN DEFAULT false NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS rn_notifications_recipient_idx
+    ON public.rn_notifications (recipient_id, is_read, created_at DESC);
 
 ALTER TABLE public.rn_notifications ENABLE ROW LEVEL SECURITY;
 
@@ -291,10 +322,11 @@ CREATE POLICY "rn_read_own_notifications" ON public.rn_notifications
     FOR SELECT USING (auth.uid() = recipient_id);
 
 CREATE POLICY "rn_insert_notifications_for_auth" ON public.rn_notifications
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+    FOR INSERT WITH CHECK (auth.uid() = sender_id AND recipient_id <> sender_id);
 
 CREATE POLICY "rn_update_own_notifications" ON public.rn_notifications
-    FOR UPDATE USING (auth.uid() = recipient_id);
+    FOR UPDATE USING (auth.uid() = recipient_id)
+    WITH CHECK (auth.uid() = recipient_id);
 
 -- 12. Location Share Requests Table
 CREATE TABLE IF NOT EXISTS public.rn_location_share_requests (
@@ -322,23 +354,51 @@ CREATE POLICY "rn_read_own_location_share_requests" ON public.rn_location_share_
     FOR SELECT USING (auth.uid() = requester_id OR auth.uid() = recipient_id);
 
 CREATE POLICY "rn_insert_own_location_share_requests" ON public.rn_location_share_requests
-    FOR INSERT WITH CHECK (auth.uid() = requester_id AND requester_id <> recipient_id);
+    FOR INSERT WITH CHECK (auth.uid() = requester_id AND requester_id <> recipient_id AND status = 'pending');
 
 CREATE POLICY "rn_update_own_location_share_requests" ON public.rn_location_share_requests
     FOR UPDATE USING (auth.uid() = requester_id OR auth.uid() = recipient_id)
-    WITH CHECK (auth.uid() = requester_id OR auth.uid() = recipient_id);
+    WITH CHECK (
+        (auth.uid() = requester_id AND status IN ('canceled', 'ended'))
+        OR (auth.uid() = recipient_id AND status IN ('accepted', 'declined', 'ended'))
+    );
+
+REVOKE ALL ON public.rn_tip_comments FROM anon, authenticated;
+REVOKE ALL ON public.rn_tip_likes FROM anon, authenticated;
+REVOKE ALL ON public.rn_notifications FROM anon, authenticated;
+REVOKE ALL ON public.rn_location_share_requests FROM anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON public.rn_tip_comments TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.rn_tip_likes TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.rn_notifications TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.rn_location_share_requests TO authenticated;
 
 -- 13. Enable Supabase Realtime for custom tables
 do $$
 begin
-  alter publication supabase_realtime add table public.rn_route_tips;
-  alter publication supabase_realtime add table public.rn_route_zones;
-  alter publication supabase_realtime add table public.rn_route_zone_photos;
-  alter publication supabase_realtime add table public.rn_tip_comments;
-  alter publication supabase_realtime add table public.rn_notifications;
-  alter publication supabase_realtime add table public.rn_location_share_requests;
-exception when others then
-  -- Silently ignore errors if publication doesn't exist or tables are already added
-  null;
+  begin
+    alter publication supabase_realtime add table public.rn_route_tips;
+  exception when others then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.rn_route_zones;
+  exception when others then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.rn_route_zone_photos;
+  exception when others then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.rn_tip_comments;
+  exception when others then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.rn_notifications;
+  exception when others then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.rn_location_share_requests;
+  exception when others then null;
+  end;
 end $$;
 

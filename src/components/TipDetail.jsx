@@ -957,7 +957,7 @@ const styles = {
   },
 
   // 이력 모달
-  historyOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
+  historyOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(249,250,251,0.72)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
   historyCard: { width: '100%', maxWidth: '440px', maxHeight: '75vh', borderRadius: 'var(--radius-lg)', border: '1px solid var(--bg-card-border)', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' },
   historyHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--bg-card-border)' },
   historyTitle: { fontSize: '16px', fontWeight: '700' },

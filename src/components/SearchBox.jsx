@@ -223,7 +223,7 @@ const styles = {
     position: 'absolute',
     top: '16px',
     left: '16px',
-    right: '82px',
+    right: '136px',
     zIndex: 900,
     display: 'flex',
     flexDirection: 'column',

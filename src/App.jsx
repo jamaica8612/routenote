@@ -1273,7 +1273,7 @@ export default function App() {
           title="로그아웃"
           style={styles.headerLogoutBtn}
         >
-          <LogOut size={19} color="#FFFFFF" strokeWidth={2.2} />
+          <LogOut size={19} color="var(--text-primary)" strokeWidth={2.2} />
         </button>
       )}
 
@@ -1285,7 +1285,7 @@ export default function App() {
           title="알림"
           style={styles.bellBtn}
         >
-          <Bell size={19} color="#FFFFFF" strokeWidth={2.2} />
+          <Bell size={19} color="var(--text-primary)" strokeWidth={2.2} />
           {unreadCount > 0 && (
             <span style={styles.bellBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
           )}
@@ -1300,7 +1300,7 @@ export default function App() {
           title={isSharingLocation ? '위치공유 설정' : '위치공유 요청'}
           style={styles.locationShareBtn(isSharingLocation, currentUser?.role === 'admin')}
         >
-          <Users size={18} color="#FFFFFF" strokeWidth={2.2} />
+          <Users size={18} color={isSharingLocation ? '#FFFFFF' : 'var(--text-primary)'} strokeWidth={2.2} />
           {isSharingLocation && <span style={styles.liveDot} />}
         </button>
       )}
@@ -1313,7 +1313,7 @@ export default function App() {
           title="현재 위치로 지도 이동"
           style={styles.floatingCompassBtn(currentUser?.role === 'admin')}
         >
-          <Locate size={19} color="#FFFFFF" strokeWidth={2.2} />
+          <Locate size={19} color="var(--text-primary)" strokeWidth={2.2} />
         </button>
       )}
 
@@ -1344,7 +1344,7 @@ const styles = {
     justifyContent: 'center',
     width: '100%',
     height: '100%',
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F9FAFB',
   },
   loaderText: {
     marginTop: '16px',
@@ -1358,15 +1358,15 @@ const styles = {
     width: '46px',
     height: '46px',
     borderRadius: '14px',
-    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.24)',
+    boxShadow: 'var(--shadow-md)',
     zIndex: 900,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.78), rgba(15, 23, 42, 0.62))',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     backdropFilter: 'blur(14px)',
     WebkitBackdropFilter: 'blur(14px)',
-    border: '1px solid rgba(255, 255, 255, 0.16)',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
     cursor: 'pointer',
   },
   bellBadge: {
@@ -1384,7 +1384,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '0 4px',
-    border: '2px solid rgba(15, 23, 42, 0.88)',
+    border: '2px solid #FFFFFF',
     boxShadow: '0 6px 14px rgba(239, 68, 68, 0.32)',
   },
   headerLogoutBtn: {
@@ -1394,15 +1394,15 @@ const styles = {
     width: '46px',
     height: '46px',
     borderRadius: '14px',
-    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.24)',
+    boxShadow: 'var(--shadow-md)',
     zIndex: 900,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.78), rgba(15, 23, 42, 0.62))',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     backdropFilter: 'blur(14px)',
     WebkitBackdropFilter: 'blur(14px)',
-    border: '1px solid rgba(255, 255, 255, 0.16)',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
     cursor: 'pointer',
   },
   locationShareBtn: (isSharing, isAdmin) => ({
@@ -1415,19 +1415,19 @@ const styles = {
     borderRadius: '14px',
     boxShadow: isSharing
       ? '0 14px 30px rgba(16, 185, 129, 0.26)'
-      : '0 12px 28px rgba(15, 23, 42, 0.22)',
+      : 'var(--shadow-md)',
     zIndex: 850,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     background: isSharing
       ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.96), rgba(5, 150, 105, 0.86))'
-      : 'linear-gradient(180deg, rgba(17, 24, 39, 0.72), rgba(15, 23, 42, 0.54))',
+      : 'rgba(255, 255, 255, 0.9)',
     backdropFilter: 'blur(14px)',
     WebkitBackdropFilter: 'blur(14px)',
     border: isSharing
       ? '1px solid rgba(167, 243, 208, 0.46)'
-      : '1px solid rgba(255, 255, 255, 0.14)',
+      : '1px solid rgba(148, 163, 184, 0.22)',
     cursor: 'pointer',
   }),
   liveDot: {
@@ -1448,15 +1448,15 @@ const styles = {
     width: '46px',
     height: '46px',
     borderRadius: '14px',
-    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.22)',
+    boxShadow: 'var(--shadow-md)',
     zIndex: 850,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.72), rgba(15, 23, 42, 0.54))',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     backdropFilter: 'blur(14px)',
     WebkitBackdropFilter: 'blur(14px)',
-    border: '1px solid rgba(255, 255, 255, 0.14)',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
     cursor: 'pointer',
   }),
   menuContainer: {

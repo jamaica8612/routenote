@@ -121,7 +121,7 @@ export default function BottomSheet({ isOpen, onClose, title, children }) {
       }
     : {
         ...styles.overlay,
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backgroundColor: 'transparent',
         pointerEvents: isOpen ? 'all' : 'none',
       };
 
@@ -179,7 +179,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'transparent',
     zIndex: 1000,
     display: 'flex',
     alignItems: 'flex-end',
