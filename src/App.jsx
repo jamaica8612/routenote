@@ -917,7 +917,7 @@ const styles = {
     justifyContent: 'center',
     width: '100%',
     height: '100%',
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F9FAFB',
   },
   loaderText: {
     marginTop: '16px',
