@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, Compass, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
+import { Bell, Compass, Locate, LogOut, MapPin, Megaphone, Plus, Users } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -11,6 +11,8 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
+import AnnouncementForm from './components/AnnouncementForm';
+import AnnouncementModal from './components/AnnouncementModal';
 import LocationSharingPanel from './components/LocationSharingPanel';
 import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
@@ -51,6 +53,10 @@ export default function App() {
   // 알림 상태
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // 공지사항
+  const [announcements, setAnnouncements] = useState([]);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -236,6 +242,37 @@ export default function App() {
 
     return () => supabase.removeChannel(notiChannel);
   }, [currentUser]);
+
+  // 공지사항 fetch
+  useEffect(() => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+    const fetchAnnouncements = async () => {
+      const { data } = await supabase
+        .from('rn_announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (!data || data.length === 0) return;
+      const dismissed = JSON.parse(localStorage.getItem('rn_dismissed_announcements') || '[]');
+      const visible = data.filter(a => !dismissed.includes(a.id));
+      if (visible.length > 0) {
+        setAnnouncements(visible);
+        setShowAnnouncementModal(true);
+      }
+    };
+    fetchAnnouncements();
+  }, [currentUser]);
+
+  const handleDismissAnnouncement = (announcementId) => {
+    const dismissed = JSON.parse(localStorage.getItem('rn_dismissed_announcements') || '[]');
+    if (!dismissed.includes(announcementId)) {
+      dismissed.push(announcementId);
+      localStorage.setItem('rn_dismissed_announcements', JSON.stringify(dismissed));
+    }
+    const remaining = announcements.filter(a => a.id !== announcementId);
+    setAnnouncements(remaining);
+    if (remaining.length === 0) setShowAnnouncementModal(false);
+  };
 
   // Sync open tip details bottom sheet with updates from database
   useEffect(() => {
@@ -667,6 +704,8 @@ export default function App() {
             }}
           />
         );
+      case 'announcement-admin':
+        return <AnnouncementForm currentUser={currentUser} />;
       case 'location-sharing':
         return (
           <LocationSharingPanel
@@ -836,6 +875,21 @@ export default function App() {
         </button>
       )}
 
+      {!isDrawingZone && !isDrawingPath && currentUser?.role === 'admin' && (
+        <button
+          className="btn btn-icon"
+          onClick={() => {
+            setSheetTitle('공지사항 관리');
+            setSheetContent('announcement-admin');
+            setSheetOpen(true);
+          }}
+          title="공지사항 관리"
+          style={styles.megaphoneBtn}
+        >
+          <Megaphone size={17} color="var(--text-primary)" />
+        </button>
+      )}
+
       {!isDrawingZone && !isDrawingPath && !isDemoUser(currentUser) && (
         <button
           className="btn btn-icon"
@@ -905,6 +959,14 @@ export default function App() {
           onClose={() => setActiveRoadviewCoords(null)}
         />
       )}
+
+      {showAnnouncementModal && announcements.length > 0 && (
+        <AnnouncementModal
+          announcements={announcements}
+          onClose={() => setShowAnnouncementModal(false)}
+          onDismiss={handleDismissAnnouncement}
+        />
+      )}
     </div>
   );
 }
@@ -923,6 +985,24 @@ const styles = {
     marginTop: '16px',
     color: 'var(--text-secondary)',
     fontWeight: '600',
+  },
+  megaphoneBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '144px',
+    width: '44px',
+    height: '44px',
+    borderRadius: '50%',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(0, 0, 0, 0.08)',
+    cursor: 'pointer',
   },
   bellBtn: {
     position: 'absolute',
