@@ -11,6 +11,7 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
+import { enablePushNotifications, getPushPermissionState, getPushSupportState, sendPushForNotification } from './utils/pushNotifications';
 import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
 
@@ -53,6 +54,8 @@ export default function App() {
   // 알림 상태
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pushPermission, setPushPermission] = useState('default');
+  const [pushSaving, setPushSaving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -164,6 +167,11 @@ export default function App() {
     return () => supabase.removeChannel(notiChannel);
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+    getPushPermissionState().then(setPushPermission);
+  }, [currentUser]);
+
   // Sync open tip details bottom sheet with updates from database
   useEffect(() => {
     if (selectedTip && tips.length > 0) {
@@ -268,6 +276,21 @@ export default function App() {
         .update({ is_read: true })
         .eq('recipient_id', currentUser.id)
         .eq('is_read', false);
+    }
+  };
+
+  const handleEnablePushNotifications = async () => {
+    if (!currentUser || isDemoUser(currentUser)) return;
+    setPushSaving(true);
+    try {
+      await enablePushNotifications(currentUser.id);
+      setPushPermission(await getPushPermissionState());
+      alert('푸시 알림이 켜졌습니다.');
+    } catch (err) {
+      setPushPermission(await getPushPermissionState());
+      alert('푸시 알림 설정 실패: ' + err.message);
+    } finally {
+      setPushSaving(false);
     }
   };
 
@@ -524,12 +547,18 @@ export default function App() {
 
   const notifyLocationShare = async ({ recipientId, type, message }) => {
     try {
-      await supabase.from('rn_notifications').insert({
-        recipient_id: recipientId,
-        sender_id: currentUser.id,
-        type,
-        message,
-      });
+      const { data, error } = await supabase
+        .from('rn_notifications')
+        .insert({
+          recipient_id: recipientId,
+          sender_id: currentUser.id,
+          type,
+          message,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      await sendPushForNotification(data?.id);
     } catch (err) {
       console.warn('Location share notification failed:', err.message);
     }
@@ -996,6 +1025,24 @@ export default function App() {
       case 'notifications':
         return (
           <div style={stylesNoti.container}>
+            {!getPushSupportState().supported && (
+              <div style={stylesNoti.pushNotice}>이 브라우저에서는 푸시 알림을 지원하지 않습니다.</div>
+            )}
+            {getPushSupportState().supported && pushPermission !== 'granted' && (
+              <button
+                type="button"
+                onClick={handleEnablePushNotifications}
+                disabled={pushSaving || pushPermission === 'denied'}
+                style={stylesNoti.pushButton(pushSaving || pushPermission === 'denied')}
+              >
+                {pushPermission === 'denied'
+                  ? '브라우저 설정에서 알림 권한을 허용해주세요'
+                  : pushSaving ? '푸시 알림 설정 중...' : '푸시 알림 켜기'}
+              </button>
+            )}
+            {pushPermission === 'granted' && (
+              <div style={stylesNoti.pushEnabled}>푸시 알림 켜짐</div>
+            )}
             {notifications.length === 0 && (
               <p style={stylesNoti.empty}>아직 알림이 없습니다 🔕</p>
             )}
@@ -1027,6 +1074,40 @@ export default function App() {
   const stylesNoti = {
     container: { display: 'flex', flexDirection: 'column', gap: '2px', paddingBottom: '8px' },
     empty: { textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)', padding: '32px 0' },
+    pushNotice: {
+      margin: '0 0 10px',
+      padding: '12px 14px',
+      borderRadius: '14px',
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      border: '1px solid rgba(245, 158, 11, 0.22)',
+      color: 'var(--text-secondary)',
+      fontSize: '13px',
+      fontWeight: 700,
+    },
+    pushEnabled: {
+      margin: '0 0 10px',
+      padding: '12px 14px',
+      borderRadius: '14px',
+      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      border: '1px solid rgba(16, 185, 129, 0.22)',
+      color: '#047857',
+      fontSize: '13px',
+      fontWeight: 800,
+      textAlign: 'center',
+    },
+    pushButton: (disabled) => ({
+      width: '100%',
+      minHeight: '46px',
+      margin: '0 0 10px',
+      borderRadius: '14px',
+      border: '1px solid rgba(79, 70, 229, 0.22)',
+      backgroundColor: disabled ? 'rgba(148, 163, 184, 0.14)' : 'var(--primary)',
+      color: disabled ? 'var(--text-secondary)' : '#FFFFFF',
+      fontSize: '14px',
+      fontWeight: 800,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      boxShadow: disabled ? 'none' : '0 8px 20px rgba(79, 70, 229, 0.22)',
+    }),
     item: {
       display: 'flex', alignItems: 'flex-start', gap: '12px',
       padding: '14px 16px', borderRadius: 'var(--radius-md)',

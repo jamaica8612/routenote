@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Check, Calendar, User, Clock, Trash2, Edit3, ArrowRight, ShieldAlert, Send, MessageCircle, Heart } from 'lucide-react';
 import { getDbUserId, isDemoUser } from '../utils/userUtils';
+import { sendPushForNotification } from '../utils/pushNotifications';
 
 const MARKER_TYPES = {
   vehicle_entrance: { emoji: '🚗', label: '차량 진입구' },
@@ -265,16 +266,21 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
           (m) => mentionedNames.includes(m.name.toLowerCase()) && m.id !== currentUser?.id
         );
         if (mentioned.length > 0) {
-          await supabase.from('rn_notifications').insert(
-            mentioned.map((m) => ({
-              recipient_id: m.id,
-              sender_id: getDbUserId(currentUser),
-              type: 'mention',
-              tip_id: tip.id,
-              comment_id: commentData?.id || null,
-              message: `${currentUser.name}님이 댓글에서 회원님을 멘션했습니다: "${trimmed.slice(0, 60)}${trimmed.length > 60 ? '...' : ''}"`,
-            }))
-          );
+          const { data: notificationRows, error: notificationError } = await supabase
+            .from('rn_notifications')
+            .insert(
+              mentioned.map((m) => ({
+                recipient_id: m.id,
+                sender_id: getDbUserId(currentUser),
+                type: 'mention',
+                tip_id: tip.id,
+                comment_id: commentData?.id || null,
+                message: `${currentUser.name}님이 댓글에서 회원님을 멘션했습니다: "${trimmed.slice(0, 60)}${trimmed.length > 60 ? '...' : ''}"`,
+              }))
+            )
+            .select('id');
+          if (notificationError) throw notificationError;
+          await Promise.all((notificationRows || []).map((row) => sendPushForNotification(row.id)));
         }
       }
     } catch (err) {

@@ -328,6 +328,35 @@ CREATE POLICY "rn_update_own_notifications" ON public.rn_notifications
     FOR UPDATE USING (auth.uid() = recipient_id)
     WITH CHECK (auth.uid() = recipient_id);
 
+CREATE TABLE IF NOT EXISTS public.rn_push_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    endpoint TEXT UNIQUE NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS rn_push_subscriptions_user_idx
+    ON public.rn_push_subscriptions (user_id, updated_at DESC);
+
+ALTER TABLE public.rn_push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_push_subscriptions_select_own" ON public.rn_push_subscriptions
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "rn_push_subscriptions_insert_own" ON public.rn_push_subscriptions
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "rn_push_subscriptions_update_own" ON public.rn_push_subscriptions
+    FOR UPDATE USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "rn_push_subscriptions_delete_own" ON public.rn_push_subscriptions
+    FOR DELETE USING (auth.uid() = user_id);
+
 -- 12. Location Share Requests Table
 CREATE TABLE IF NOT EXISTS public.rn_location_share_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -366,11 +395,13 @@ CREATE POLICY "rn_update_own_location_share_requests" ON public.rn_location_shar
 REVOKE ALL ON public.rn_tip_comments FROM anon, authenticated;
 REVOKE ALL ON public.rn_tip_likes FROM anon, authenticated;
 REVOKE ALL ON public.rn_notifications FROM anon, authenticated;
+REVOKE ALL ON public.rn_push_subscriptions FROM anon, authenticated;
 REVOKE ALL ON public.rn_location_share_requests FROM anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE ON public.rn_tip_comments TO authenticated;
 GRANT SELECT, INSERT, DELETE ON public.rn_tip_likes TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.rn_notifications TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.rn_push_subscriptions TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.rn_location_share_requests TO authenticated;
 
 -- 13. Enable Supabase Realtime for custom tables

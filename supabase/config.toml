@@ -6,3 +6,5 @@ verify_jwt = false
 [functions.rn-geocode]
 verify_jwt = false
 
+[functions.rn-send-push]
+verify_jwt = true
