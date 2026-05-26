@@ -1,55 +1,112 @@
 import sharp from 'sharp';
-import { readFileSync } from 'fs';
 
-const svgSource = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="0" fill="#F9FAFB"/>
-  <path d="M128 384 C128 384, 170 299, 213 256 C256 213, 299 234, 320 192 C341 149, 384 128, 384 128" stroke="#4F46E5" stroke-width="20" stroke-linecap="round" fill="none" opacity="0.3"/>
-  <g transform="translate(128, 340)">
-    <circle cx="0" cy="0" r="36" fill="#4F46E5" opacity="0.2"/>
-    <circle cx="0" cy="0" r="18" fill="#4F46E5"/>
+const SIZE = 512;
+const HALF = SIZE / 2;
+
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <filter id="dotshadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background gradient -->
+  <rect width="${SIZE}" height="${SIZE}" rx="108" fill="url(#bg)"/>
+
+  <!-- Route curve -->
+  <path d="M115 395 C145 320, 195 275, 250 250 C305 225, 330 200, 395 115"
+        stroke="rgba(255,255,255,0.3)" stroke-width="16" stroke-linecap="round" fill="none"/>
+
+  <!-- Start dot -->
+  <circle cx="115" cy="395" r="18" fill="rgba(255,255,255,0.9)" filter="url(#dotshadow)"/>
+  <circle cx="115" cy="395" r="8" fill="#4F46E5"/>
+
+  <!-- End dot -->
+  <circle cx="395" cy="115" r="18" fill="rgba(255,255,255,0.9)" filter="url(#dotshadow)"/>
+  <circle cx="395" cy="115" r="8" fill="#4F46E5"/>
+
+  <!-- Main pin shadow -->
+  <ellipse cx="${HALF}" cy="340" rx="40" ry="10" fill="rgba(0,0,0,0.12)"/>
+
+  <!-- Pin body -->
+  <g filter="url(#shadow)">
+    <!-- Pin tail -->
+    <polygon points="${HALF-30},275 ${HALF+30},275 ${HALF},340" fill="#FFFFFF"/>
+    <!-- Pin head circle -->
+    <circle cx="${HALF}" cy="210" r="90" fill="#FFFFFF"/>
   </g>
-  <g transform="translate(277, 213)">
-    <path d="M0-72 C-40-72 -63-45 -63-13.5 C-63 27 0 72 0 72 C0 72 63 27 63-13.5 C63-45 40-72 0-72Z" fill="#6366F1"/>
-    <circle cx="0" cy="-18" r="22" fill="#FFFFFF"/>
-  </g>
-  <g transform="translate(384, 107)">
-    <circle cx="0" cy="0" r="32" fill="#4F46E5" opacity="0.2"/>
-    <circle cx="0" cy="0" r="16" fill="#4F46E5"/>
-  </g>
+
+  <!-- Letter N inside pin -->
+  <text x="${HALF}" y="232" text-anchor="middle" font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="110" font-weight="800" fill="#4F46E5" letter-spacing="-3">N</text>
 </svg>`;
 
-const svgMaskable = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" fill="#F9FAFB"/>
-  <path d="M153 359 C153 359, 189 287, 224 252 C259 217, 294 234, 311 199 C328 164, 359 149, 359 149" stroke="#4F46E5" stroke-width="18" stroke-linecap="round" fill="none" opacity="0.3"/>
-  <g transform="translate(153, 320)">
-    <circle cx="0" cy="0" r="30" fill="#4F46E5" opacity="0.2"/>
-    <circle cx="0" cy="0" r="15" fill="#4F46E5"/>
-  </g>
-  <g transform="translate(270, 223)">
-    <path d="M0-58 C-32-58 -51-36 -51-11 C-51 22 0 58 0 58 C0 58 51 22 51-11 C51-36 32-58 0-58Z" fill="#6366F1"/>
-    <circle cx="0" cy="-14" r="18" fill="#FFFFFF"/>
-  </g>
-  <g transform="translate(359, 128)">
-    <circle cx="0" cy="0" r="26" fill="#4F46E5" opacity="0.2"/>
-    <circle cx="0" cy="0" r="13" fill="#4F46E5"/>
-  </g>
+const svgMaskable = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full bleed background for maskable -->
+  <rect width="${SIZE}" height="${SIZE}" fill="url(#bg)"/>
+
+  <!-- Route curve (smaller, centered for safe zone) -->
+  <path d="M145 375 C170 315, 210 280, 255 258 C300 236, 320 210, 370 140"
+        stroke="rgba(255,255,255,0.25)" stroke-width="14" stroke-linecap="round" fill="none"/>
+
+  <!-- Start dot -->
+  <circle cx="145" cy="375" r="14" fill="rgba(255,255,255,0.85)"/>
+  <circle cx="145" cy="375" r="6" fill="#4F46E5"/>
+
+  <!-- End dot -->
+  <circle cx="370" cy="140" r="14" fill="rgba(255,255,255,0.85)"/>
+  <circle cx="370" cy="140" r="6" fill="#4F46E5"/>
+
+  <!-- Pin -->
+  <polygon points="${HALF-24},280 ${HALF+24},280 ${HALF},330" fill="#FFFFFF"/>
+  <circle cx="${HALF}" cy="220" r="72" fill="#FFFFFF"/>
+
+  <!-- Letter N -->
+  <text x="${HALF}" y="240" text-anchor="middle" font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="88" font-weight="800" fill="#4F46E5" letter-spacing="-2">N</text>
+</svg>`;
+
+const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="10" fill="url(#bg)"/>
+  <polygon points="20,30 28,30 24,36" fill="#FFFFFF"/>
+  <circle cx="24" cy="22" r="11" fill="#FFFFFF"/>
+  <text x="24" y="26.5" text-anchor="middle" font-family="Arial, sans-serif"
+        font-size="14" font-weight="800" fill="#4F46E5">N</text>
 </svg>`;
 
 async function generate() {
-  const sizes = [192, 512];
-  for (const size of sizes) {
-    await sharp(Buffer.from(svgSource))
-      .resize(size, size)
-      .png()
-      .toFile(`public/icon-${size}.png`);
-    console.log(`Created icon-${size}.png`);
-
-    await sharp(Buffer.from(svgMaskable))
-      .resize(size, size)
-      .png()
-      .toFile(`public/icon-${size}-maskable.png`);
-    console.log(`Created icon-${size}-maskable.png`);
+  for (const size of [192, 512]) {
+    await sharp(Buffer.from(svg)).resize(size, size).png().toFile(`public/icon-${size}.png`);
+    await sharp(Buffer.from(svgMaskable)).resize(size, size).png().toFile(`public/icon-${size}-maskable.png`);
+    console.log(`icon-${size}.png + maskable`);
   }
+
+  const { writeFileSync } = await import('fs');
+  writeFileSync('public/favicon.svg', faviconSvg);
+  console.log('favicon.svg');
 }
 
 generate().catch(console.error);
