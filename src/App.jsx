@@ -11,6 +11,7 @@ import TipDetail from './components/TipDetail';
 import TipForm from './components/TipForm';
 import ZoneDetail from './components/ZoneDetail';
 import ZoneForm from './components/ZoneForm';
+import LocationSharingPanel from './components/LocationSharingPanel';
 import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
 
@@ -42,8 +43,10 @@ export default function App() {
 
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [teamMembers, setTeamMembers] = useState({});
-  const presenceChannelRef = useRef(null);
+  const [activeShares, setActiveShares] = useState([]);
   const myLatLngRef = useRef(null);
+  const lastLocationWriteRef = useRef(0);
+  const locationChannelRef = useRef(null);
 
   // 알림 상태
   const [notifications, setNotifications] = useState([]);
@@ -103,13 +106,105 @@ export default function App() {
     };
   }, [currentUser]);
 
+  // Fetch accepted shares + subscribe to partner locations
   useEffect(() => {
-    return () => {
-      if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
+    if (!currentUser || isDemoUser(currentUser)) return;
+
+    const fetchAcceptedShares = async () => {
+      const { data } = await supabase
+        .from('rn_location_shares')
+        .select('*, requester:rn_profiles!rn_location_shares_requester_id_fkey(id, name), recipient:rn_profiles!rn_location_shares_recipient_id_fkey(id, name)')
+        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .eq('status', 'accepted');
+      const accepted = data || [];
+      setActiveShares(accepted);
+      if (accepted.length > 0) fetchPartnerLocations(accepted);
+    };
+
+    const fetchPartnerLocations = async (shares) => {
+      const partnerIds = shares.map(s =>
+        s.requester_id === currentUser.id ? s.recipient_id : s.requester_id
+      );
+      const { data } = await supabase
+        .from('rn_user_locations')
+        .select('*')
+        .in('user_id', partnerIds);
+      if (data) {
+        const membersMap = {};
+        data.forEach(loc => {
+          const share = shares.find(s =>
+            s.requester_id === loc.user_id || s.recipient_id === loc.user_id
+          );
+          const partner = share?.requester_id === loc.user_id ? share.requester : share?.recipient;
+          membersMap[loc.user_id] = {
+            user_id: loc.user_id,
+            name: partner?.name || '팀원',
+            lat: loc.lat,
+            lng: loc.lng,
+            updated_at: loc.updated_at,
+          };
+        });
+        setTeamMembers(membersMap);
       }
     };
-  }, []);
+
+    fetchAcceptedShares();
+
+    const shareCh = supabase
+      .channel('rn_share_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rn_location_shares' }, () => {
+        fetchAcceptedShares();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(shareCh);
+    };
+  }, [currentUser]);
+
+  // Subscribe to partner location updates
+  useEffect(() => {
+    if (locationChannelRef.current) {
+      supabase.removeChannel(locationChannelRef.current);
+      locationChannelRef.current = null;
+    }
+    if (!currentUser || activeShares.length === 0) {
+      setTeamMembers({});
+      return;
+    }
+
+    const partnerIds = activeShares.map(s =>
+      s.requester_id === currentUser.id ? s.recipient_id : s.requester_id
+    );
+
+    const ch = supabase
+      .channel('rn_partner_locations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rn_user_locations' }, (payload) => {
+        const loc = payload.new;
+        if (!loc || !partnerIds.includes(loc.user_id)) return;
+        const share = activeShares.find(s =>
+          s.requester_id === loc.user_id || s.recipient_id === loc.user_id
+        );
+        const partner = share?.requester_id === loc.user_id ? share.requester : share?.recipient;
+        setTeamMembers(prev => ({
+          ...prev,
+          [loc.user_id]: {
+            user_id: loc.user_id,
+            name: partner?.name || '팀원',
+            lat: loc.lat,
+            lng: loc.lng,
+            updated_at: loc.updated_at,
+          },
+        }));
+      })
+      .subscribe();
+
+    locationChannelRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      locationChannelRef.current = null;
+    };
+  }, [activeShares, currentUser]);
 
   // 알림 구독
   useEffect(() => {
@@ -364,68 +459,24 @@ export default function App() {
     setTrackLocationTrigger(prev => prev + 1);
   };
 
-  const handleLocationUpdate = (lat, lng) => {
-    // 위치 공유 중이면 Presence 업데이트
+  const handleLocationUpdate = async (lat, lng) => {
     myLatLngRef.current = { lat, lng };
-    if (isSharingLocation && presenceChannelRef.current) {
-      presenceChannelRef.current.track({
-        user_id: currentUser?.id,
-        name: currentUser?.name || '팀원',
-        lat,
-        lng,
-        updated_at: new Date().toISOString(),
-      });
-    }
+    if (!isSharingLocation || !currentUser || activeShares.length === 0) return;
+    const now = Date.now();
+    if (now - lastLocationWriteRef.current < 5000) return;
+    lastLocationWriteRef.current = now;
+    await supabase.from('rn_user_locations').upsert({
+      user_id: currentUser.id,
+      lat,
+      lng,
+      updated_at: new Date().toISOString(),
+    });
   };
 
-  const handleToggleLocationSharing = () => {
-    if (isSharingLocation) {
-      presenceChannelRef.current?.untrack();
-      setIsSharingLocation(false);
-      setTeamMembers({});
-      return;
-    }
-
-    // 새 채널 생성 (없을 때만)
-    if (!presenceChannelRef.current) {
-      presenceChannelRef.current = supabase.channel('rn_team_presence', {
-        config: { presence: { key: currentUser?.id || 'unknown' } },
-      });
-
-      presenceChannelRef.current
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannelRef.current.presenceState();
-          const members = {};
-          Object.entries(state).forEach(([userId, presences]) => {
-            if (userId !== currentUser?.id && presences.length > 0) {
-              members[userId] = presences[0];
-            }
-          });
-          setTeamMembers(members);
-        })
-        .on('presence', { event: 'leave' }, ({ key }) => {
-          setTeamMembers((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED' && myLatLngRef.current) {
-            await presenceChannelRef.current.track({
-              user_id: currentUser?.id,
-              name: currentUser?.name || '팀원',
-              lat: myLatLngRef.current.lat,
-              lng: myLatLngRef.current.lng,
-              updated_at: new Date().toISOString(),
-            });
-          }
-        });
-    }
-
-    setIsSharingLocation(true);
-    // 위치 추적도 자동 시작
-    setTrackLocationTrigger((prev) => prev + 1);
+  const handleOpenLocationSharing = () => {
+    setSheetTitle('위치 공유');
+    setSheetContent('location-sharing');
+    setSheetOpen(true);
   };
 
   const handleOpenRoadview = (lat, lng) => {
@@ -616,6 +667,22 @@ export default function App() {
             }}
           />
         );
+      case 'location-sharing':
+        return (
+          <LocationSharingPanel
+            currentUser={currentUser}
+            isSharingLocation={isSharingLocation}
+            activeShares={activeShares}
+            onStartGps={() => {
+              setIsSharingLocation(true);
+              setTrackLocationTrigger(prev => prev + 1);
+            }}
+            onStopGps={() => {
+              setIsSharingLocation(false);
+            }}
+            onSharesChanged={(newShares) => setActiveShares(newShares)}
+          />
+        );
       case 'notifications':
         return (
           <div style={stylesNoti.container}>
@@ -624,9 +691,20 @@ export default function App() {
             )}
             {notifications.map((noti) => (
               <div key={noti.id} style={{ ...stylesNoti.item, ...(noti.is_read ? {} : stylesNoti.itemUnread) }}>
-                <div style={stylesNoti.icon}>💬</div>
+                <div style={stylesNoti.icon}>{noti.type === 'location_share_request' ? '📍' : '💬'}</div>
                 <div style={stylesNoti.body}>
                   <p style={stylesNoti.message}>{noti.message}</p>
+                  {noti.type === 'location_share_request' && noti.share_id && (
+                    <button
+                      style={{ marginTop: '6px', padding: '4px 12px', borderRadius: '8px', border: 'none', background: 'var(--primary)', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      onClick={() => {
+                        setSheetTitle('위치 공유');
+                        setSheetContent('location-sharing');
+                      }}
+                    >
+                      확인하기
+                    </button>
+                  )}
                   <span style={stylesNoti.time}>
                     {(() => {
                       const d = new Date(noti.created_at);
@@ -775,13 +853,13 @@ export default function App() {
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
           className="btn btn-icon"
-          onClick={handleToggleLocationSharing}
-          title={isSharingLocation ? '위치 공유 중 (탭하여 중지)' : '팀원에게 위치 공유'}
+          onClick={handleOpenLocationSharing}
+          title="위치 공유"
           style={{
             position: 'absolute',
             bottom: '40px',
-            left: isSharingLocation || currentUser?.role === 'admin' ? '68px' : 'auto',
-            right: isSharingLocation || currentUser?.role === 'admin' ? 'auto' : '68px',
+            left: activeShares.length > 0 || currentUser?.role === 'admin' ? '68px' : 'auto',
+            right: activeShares.length > 0 || currentUser?.role === 'admin' ? 'auto' : '68px',
             width: '44px',
             height: '44px',
             borderRadius: '50%',
@@ -790,10 +868,10 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: isSharingLocation ? 'rgba(16, 185, 129, 0.75)' : 'rgba(15, 23, 42, 0.45)',
+            backgroundColor: activeShares.length > 0 ? 'rgba(16, 185, 129, 0.75)' : 'rgba(15, 23, 42, 0.45)',
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
-            border: isSharingLocation ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+            border: activeShares.length > 0 ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
             cursor: 'pointer',
           }}
         >

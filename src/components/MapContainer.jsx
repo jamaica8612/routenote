@@ -555,6 +555,10 @@ export default function MapContainer({
       const position = new window.naver.maps.LatLng(member.lat, member.lng);
       const name = member.name || '팀원';
       const initial = name.charAt(0);
+      const isStale = member.updated_at && (Date.now() - new Date(member.updated_at).getTime()) > 120000;
+      const circleGradient = isStale ? 'linear-gradient(135deg, #9CA3AF, #6B7280)' : 'linear-gradient(135deg, #10B981, #059669)';
+      const circleShadow = isStale ? '0 2px 8px rgba(107,114,128,0.4)' : '0 2px 8px rgba(16,185,129,0.55)';
+      const labelBg = isStale ? 'rgba(107,114,128,0.85)' : 'rgba(16,185,129,0.92)';
 
       const iconContent = `
         <div style="
@@ -568,9 +572,9 @@ export default function MapContainer({
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #10B981, #059669);
+            background: ${circleGradient};
             border: 2.5px solid #FFFFFF;
-            box-shadow: 0 2px 8px rgba(16,185,129,0.55);
+            box-shadow: ${circleShadow};
             display: flex;
             align-items: center;
             justify-content: center;
@@ -580,7 +584,7 @@ export default function MapContainer({
           ">${initial}</div>
           <div style="
             margin-top: 3px;
-            background: rgba(16,185,129,0.92);
+            background: ${labelBg};
             color: #fff;
             font-size: 10px;
             font-weight: 600;
@@ -597,6 +601,10 @@ export default function MapContainer({
 
       if (teamMemberMarkersRef.current[id]) {
         teamMemberMarkersRef.current[id].setPosition(position);
+        teamMemberMarkersRef.current[id].setIcon({
+          content: iconContent,
+          anchor: new window.naver.maps.Point(16, 16),
+        });
       } else {
         teamMemberMarkersRef.current[id] = new window.naver.maps.Marker({
           position,

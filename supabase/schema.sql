@@ -277,9 +277,10 @@ CREATE TABLE IF NOT EXISTS public.rn_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
     sender_id UUID REFERENCES public.rn_profiles(id) ON DELETE SET NULL,
-    type TEXT NOT NULL CHECK (type IN ('mention')),
+    type TEXT NOT NULL CHECK (type IN ('mention', 'location_share_request')),
     tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE,
     comment_id UUID REFERENCES public.rn_tip_comments(id) ON DELETE SET NULL,
+    share_id UUID REFERENCES public.rn_location_shares(id) ON DELETE CASCADE,
     message TEXT,
     is_read BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -296,7 +297,76 @@ CREATE POLICY "rn_insert_notifications_for_auth" ON public.rn_notifications
 CREATE POLICY "rn_update_own_notifications" ON public.rn_notifications
     FOR UPDATE USING (auth.uid() = recipient_id);
 
--- 12. Enable Supabase Realtime for custom tables
+-- 12. Tip Likes Table
+CREATE TABLE IF NOT EXISTS public.rn_tip_likes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tip_id UUID REFERENCES public.rn_route_tips(id) ON DELETE CASCADE NOT NULL,
+    created_by UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (tip_id, created_by)
+);
+
+ALTER TABLE public.rn_tip_likes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_likes_for_auth" ON public.rn_tip_likes
+    FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "rn_insert_likes_for_auth" ON public.rn_tip_likes
+    FOR INSERT WITH CHECK (auth.uid() = created_by);
+CREATE POLICY "rn_delete_own_likes" ON public.rn_tip_likes
+    FOR DELETE USING (auth.uid() = created_by);
+
+-- 13. Location Shares Table (1:1 sharing relationships)
+CREATE TABLE IF NOT EXISTS public.rn_location_shares (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requester_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    recipient_id UUID REFERENCES public.rn_profiles(id) ON DELETE CASCADE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'rejected', 'ended')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX rn_location_shares_active_pair
+    ON public.rn_location_shares (LEAST(requester_id, recipient_id), GREATEST(requester_id, recipient_id))
+    WHERE status IN ('pending', 'accepted');
+
+ALTER TABLE public.rn_location_shares ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_own_shares" ON public.rn_location_shares
+    FOR SELECT USING (auth.uid() = requester_id OR auth.uid() = recipient_id);
+CREATE POLICY "rn_insert_shares" ON public.rn_location_shares
+    FOR INSERT WITH CHECK (auth.uid() = requester_id);
+CREATE POLICY "rn_update_own_shares" ON public.rn_location_shares
+    FOR UPDATE USING (auth.uid() = requester_id OR auth.uid() = recipient_id);
+
+-- 14. User Locations Table (latest GPS position)
+CREATE TABLE IF NOT EXISTS public.rn_user_locations (
+    user_id UUID PRIMARY KEY REFERENCES public.rn_profiles(id) ON DELETE CASCADE,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.rn_user_locations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "rn_read_partner_locations" ON public.rn_user_locations
+    FOR SELECT USING (
+        auth.uid() = user_id
+        OR EXISTS (
+            SELECT 1 FROM public.rn_location_shares
+            WHERE status = 'accepted'
+            AND (
+                (requester_id = auth.uid() AND recipient_id = rn_user_locations.user_id)
+                OR (recipient_id = auth.uid() AND requester_id = rn_user_locations.user_id)
+            )
+        )
+    );
+CREATE POLICY "rn_upsert_own_location" ON public.rn_user_locations
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "rn_update_own_location" ON public.rn_user_locations
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- 15. Enable Supabase Realtime for custom tables
 do $$
 begin
   alter publication supabase_realtime add table public.rn_route_tips;
@@ -304,8 +374,10 @@ begin
   alter publication supabase_realtime add table public.rn_route_zone_photos;
   alter publication supabase_realtime add table public.rn_tip_comments;
   alter publication supabase_realtime add table public.rn_notifications;
+  alter publication supabase_realtime add table public.rn_location_shares;
+  alter publication supabase_realtime add table public.rn_user_locations;
+  alter publication supabase_realtime add table public.rn_tip_likes;
 exception when others then
-  -- Silently ignore errors if publication doesn't exist or tables are already added
   null;
 end $$;
 
