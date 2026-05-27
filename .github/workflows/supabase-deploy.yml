@@ -2,6 +2,14 @@ name: Supabase DB & Functions Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/supabase-deploy.yml'
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -36,15 +44,18 @@ jobs:
 
           sql = (
             "INSERT INTO public.rn_announcements (title, content, created_by, is_active) "
-            "SELECT "
-            "  '2026.05.27 주요 업데이트', "
-            "  '• 주소 검색 시 지도에 핀 마커 표시\n"
-            "• 도로명 검색 시 전체 도로를 파란 선으로 표시 (예: 수영로)\n"
-            "• 공지사항 기능 추가 (접속 시 팝업, 댓글, 다시 보지 않기)\n"
-            "• 팀원 접속끊김 텍스트 표시\n"
+            "SELECT '2026.05.27 주요 업데이트', "
+            "'• 주소 검색 시 지도에 핀 마커 표시\\n"
+            "• 도로명 검색 시 전체 도로를 파란 선으로 표시 (예: 수영로)\\n"
+            "• 공지사항 기능 추가 (접속 시 팝업, 댓글, 다시 보지 않기)\\n"
+            "• 팀원 접속끊김 텍스트 표시\\n"
             "• 위치공유/멘션 푸시 알림 정상화', "
-            "  id, true "
-            "FROM public.rn_profiles WHERE role = 'admin' LIMIT 1;"
+            "p.id, true "
+            "FROM public.rn_profiles p "
+            "WHERE p.role = 'admin' "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 주요 업데이트'"
+            ") LIMIT 1;"
           )
 
           url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
