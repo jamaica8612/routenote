@@ -75,6 +75,7 @@ export default function MapContainer({
   drawCoords,
   setDrawCoords,
   selectedZone,
+  roadGeometry,
   onCreateZone,
   onFinishDrawingZone,
   onFinishDrawingPath,
@@ -106,6 +107,7 @@ export default function MapContainer({
   const shouldFollowRef = useRef(true);
   const teamMemberMarkersRef = useRef({});
   const addressPinMarkerRef = useRef(null);
+  const roadPolylinesRef = useRef([]);
 
   useEffect(() => {
     isDrawingZoneRef.current = isDrawingZone;
@@ -329,6 +331,45 @@ export default function MapContainer({
       onZoneClick(selectedResult.data);
     }
   }, [selectedResult, mapInstance]);
+
+  useEffect(() => {
+    if (!mapInstance || !window.naver?.maps) return;
+
+    roadPolylinesRef.current.forEach(line => line.setMap(null));
+    roadPolylinesRef.current = [];
+
+    if (!roadGeometry?.length) return;
+
+    // 도로 전체 범위 계산 (지도 자동 이동용)
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+
+    roadPolylinesRef.current = roadGeometry.map(way => {
+      const path = way.map(pt => {
+        if (pt.lat < minLat) minLat = pt.lat;
+        if (pt.lat > maxLat) maxLat = pt.lat;
+        if (pt.lng < minLng) minLng = pt.lng;
+        if (pt.lng > maxLng) maxLng = pt.lng;
+        return new window.naver.maps.LatLng(pt.lat, pt.lng);
+      });
+      return new window.naver.maps.Polyline({
+        map: mapInstance,
+        path,
+        strokeColor: '#3B82F6',
+        strokeOpacity: 0.85,
+        strokeWeight: 5,
+        strokeStyle: 'solid',
+        zIndex: 10,
+      });
+    });
+
+    if (minLat !== Infinity) {
+      const bounds = new window.naver.maps.LatLngBounds(
+        new window.naver.maps.LatLng(minLat, minLng),
+        new window.naver.maps.LatLng(maxLat, maxLng)
+      );
+      mapInstance.fitBounds(bounds, { top: 80, right: 40, bottom: 40, left: 40 });
+    }
+  }, [roadGeometry, mapInstance]);
 
   useEffect(() => {
     if (!mapInstance || !zones) return;

@@ -23,6 +23,7 @@ export default function App() {
   const [zones, setZones] = useState([]);
   const [tips, setTips] = useState([]);
   const [selectedResult, setSelectedResult] = useState(null);
+  const [roadGeometry, setRoadGeometry] = useState(null);
 
   const [isDrawingZone, setIsDrawingZone] = useState(false);
   const [isDrawingPath, setIsDrawingPath] = useState(false);
@@ -1299,6 +1300,7 @@ export default function App() {
       {!isDrawingZone && !isDrawingPath && (
         <SearchBox
           onSelectResult={handleSelectResult}
+          onRoadGeometry={setRoadGeometry}
           zones={zones}
           tips={tips}
         />
@@ -1323,6 +1325,7 @@ export default function App() {
         drawCoords={drawCoords}
         setDrawCoords={setDrawCoords}
         selectedZone={selectedZone}
+        roadGeometry={roadGeometry}
         trackLocationTrigger={trackLocationTrigger}
         onLocationUpdate={handleLocationUpdate}
         teamMembers={teamMembers}

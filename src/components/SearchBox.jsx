@@ -18,7 +18,13 @@ const RESULT_META = {
   address: { label: '주소', color: '#F59E0B', icon: <Landmark size={16} color="#F59E0B" /> },
 };
 
-export default function SearchBox({ onSelectResult, zones, tips }) {
+// 한국 도로명 패턴: 대로/순환로/로/길로 끝나는 단어 추출
+function extractRoadName(query) {
+  const match = query.match(/^(.*?(?:대로|순환로|로|길))(?:\s|$)/);
+  return match ? match[1].trim() : null;
+}
+
+export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -45,6 +51,7 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
       setSearchError('');
       setIsOpen(false);
       setLoading(false);
+      onRoadGeometry?.(null);
       return;
     }
 
@@ -101,16 +108,33 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
         let nextSearchError = '';
 
         if (trimmedQuery.length >= 2) {
-          const geocodeResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
-            {
-              method: 'GET',
-              headers: {
-                apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              },
-            }
-          );
+          const roadName = extractRoadName(trimmedQuery);
+
+          const [geocodeResponse, roadResponse] = await Promise.all([
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
+              {
+                method: 'GET',
+                headers: {
+                  apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                  authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                },
+              }
+            ),
+            roadName
+              ? fetch(
+                  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-road-geometry?name=${encodeURIComponent(roadName)}`,
+                  {
+                    method: 'GET',
+                    headers: {
+                      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                      authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                    },
+                  }
+                )
+              : Promise.resolve(null),
+          ]);
+
           const data = await geocodeResponse.json();
 
           if (!geocodeResponse.ok) {
@@ -131,6 +155,17 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
             }));
 
             nextResults.push(...matchedAddresses);
+          }
+
+          if (roadResponse) {
+            try {
+              const roadData = await roadResponse.json();
+              onRoadGeometry?.(roadData?.ways?.length ? roadData.ways : null);
+            } catch {
+              onRoadGeometry?.(null);
+            }
+          } else {
+            onRoadGeometry?.(null);
           }
         }
 
@@ -159,6 +194,7 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
     setSearchError('');
     setIsOpen(false);
     onSelectResult(null);
+    onRoadGeometry?.(null);
   };
 
   return (
