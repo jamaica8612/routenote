@@ -24,8 +24,34 @@ jobs:
         with:
           version: latest
 
-      - name: Apply DB migrations
-        run: supabase db push --project-ref dewusorjwzhsdhrsrvbg
+      - name: Apply announcement migration directly
+        run: |
+          python3 << 'PYEOF'
+          import json, urllib.request, os, sys
+
+          token = os.environ["SUPABASE_ACCESS_TOKEN"]
+          ref = "dewusorjwzhsdhrsrvbg"
+
+          migration_sql = open("supabase/migrations/20260527000000_add_announcements.sql").read()
+
+          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
+          data = json.dumps({"query": migration_sql}).encode("utf-8")
+          req = urllib.request.Request(url, data=data, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+          })
+          try:
+            with urllib.request.urlopen(req) as resp:
+              print("Migration OK:", resp.read().decode())
+          except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            # 이미 존재하는 경우는 무시
+            if "already exists" in body:
+              print("Already applied, skipping.")
+            else:
+              print(f"HTTP {e.code}: {body}", file=sys.stderr)
+              sys.exit(1)
+          PYEOF
 
       - name: Deploy edge functions
         run: |
@@ -44,17 +70,16 @@ jobs:
 
           sql = (
             "INSERT INTO public.rn_announcements (title, content, created_by, is_active) "
-            "SELECT '2026.05.27 주요 업데이트', "
-            "'• 주소 검색 시 지도에 핀 마커 표시\\n"
-            "• 도로명 검색 시 전체 도로를 파란 선으로 표시 (예: 수영로)\\n"
-            "• 공지사항 기능 추가 (접속 시 팝업, 댓글, 다시 보지 않기)\\n"
-            "• 팀원 접속끊김 텍스트 표시\\n"
-            "• 위치공유/멘션 푸시 알림 정상화', "
+            "SELECT '2026.05.27 업데이트', "
+            "'• 주소/도로명 검색 시 지도에 핀 및 도로 표시\n"
+            "• 공지사항 기능 추가 (댓글, 다시 보지 않기)\n"
+            "• 팀원 접속끊김 텍스트 표시\n"
+            "• 푸시 알림 정상화', "
             "p.id, true "
             "FROM public.rn_profiles p "
             "WHERE p.role = 'admin' "
             "AND NOT EXISTS ("
-            "  SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 주요 업데이트'"
+            "  SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 업데이트'"
             ") LIMIT 1;"
           )
 
@@ -66,7 +91,7 @@ jobs:
           })
           try:
             with urllib.request.urlopen(req) as resp:
-              print("Done:", resp.read().decode())
+              print("Announcement created:", resp.read().decode())
           except urllib.error.HTTPError as e:
             body = e.read().decode()
             print(f"HTTP {e.code}: {body}", file=sys.stderr)
