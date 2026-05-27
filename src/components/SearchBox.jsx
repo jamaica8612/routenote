@@ -16,6 +16,7 @@ const RESULT_META = {
   zone: { label: '구역', color: '#6366F1', icon: <Map size={16} color="#6366F1" /> },
   tip: { label: '팁', color: '#10B981', icon: <MapPin size={16} color="#10B981" /> },
   address: { label: '주소', color: '#F59E0B', icon: <Landmark size={16} color="#F59E0B" /> },
+  road: { label: '도로', color: '#3B82F6', icon: <Map size={16} color="#3B82F6" /> },
 };
 
 // 한국 도로명 패턴: 대로/순환로/로/길로 끝나는 단어 추출
@@ -156,7 +157,18 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
                 }
               );
               const roadData = await roadResponse.json();
-              onRoadGeometry?.(roadData?.ways?.length ? roadData.ways : null);
+              if (roadData?.ways?.length) {
+                onRoadGeometry?.(roadData.ways);
+                nextResults.push({
+                  type: 'road',
+                  id: `road-${roadName}`,
+                  title: roadName,
+                  subtitle: '도로 전체 경로 지도에 표시',
+                  data: { ways: roadData.ways },
+                });
+              } else {
+                onRoadGeometry?.(null);
+              }
             } catch {
               onRoadGeometry?.(null);
             }
