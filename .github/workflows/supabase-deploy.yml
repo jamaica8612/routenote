@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/supabase-deploy.yml'
 
 concurrency:
   group: supabase-deploy
@@ -24,7 +22,7 @@ jobs:
         with:
           version: latest
 
-      - name: Apply announcement migration directly
+      - name: Apply announcement tables
         run: |
           python3 << 'PYEOF'
           import json, urllib.request, os, sys
@@ -32,10 +30,77 @@ jobs:
           token = os.environ["SUPABASE_ACCESS_TOKEN"]
           ref = "dewusorjwzhsdhrsrvbg"
 
-          migration_sql = open("supabase/migrations/20260527000000_add_announcements.sql").read()
+          sql = """
+          create table if not exists public.rn_announcements (
+            id uuid primary key default gen_random_uuid(),
+            title text not null check (char_length(title) > 0 and char_length(title) <= 100),
+            content text check (content is null or char_length(content) <= 500),
+            created_by uuid not null references public.rn_profiles(id) on delete cascade,
+            created_at timestamptz not null default now(),
+            is_active boolean not null default true
+          );
+
+          create index if not exists rn_announcements_active_idx
+            on public.rn_announcements (is_active, created_at desc);
+
+          alter table public.rn_announcements enable row level security;
+
+          do $$ begin
+            if not exists (select from pg_policies where tablename='rn_announcements' and policyname='rn_read_announcements_for_auth') then
+              execute 'create policy rn_read_announcements_for_auth on public.rn_announcements for select using (auth.role() = ''authenticated'')';
+            end if;
+          end $$;
+
+          do $$ begin
+            if not exists (select from pg_policies where tablename='rn_announcements' and policyname='rn_manage_announcements_admin') then
+              execute 'create policy rn_manage_announcements_admin on public.rn_announcements for all using (public.rn_is_admin(auth.uid())) with check (public.rn_is_admin(auth.uid()))';
+            end if;
+          end $$;
+
+          do $$ begin
+            perform pg_catalog.pg_publication_tables.pubname
+            from pg_catalog.pg_publication_tables
+            where pubname='supabase_realtime' and tablename='rn_announcements';
+            if not found then
+              alter publication supabase_realtime add table public.rn_announcements;
+            end if;
+          exception when others then null;
+          end $$;
+
+          create table if not exists public.rn_announcement_comments (
+            id uuid primary key default gen_random_uuid(),
+            announcement_id uuid not null references public.rn_announcements(id) on delete cascade,
+            content text not null check (char_length(content) > 0 and char_length(content) <= 300),
+            created_by uuid not null references public.rn_profiles(id) on delete cascade,
+            created_at timestamptz not null default now()
+          );
+
+          create index if not exists rn_ann_comments_ann_idx
+            on public.rn_announcement_comments (announcement_id, created_at);
+
+          alter table public.rn_announcement_comments enable row level security;
+
+          do $$ begin
+            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_read_ann_comments_for_auth') then
+              execute 'create policy rn_read_ann_comments_for_auth on public.rn_announcement_comments for select using (auth.role() = ''authenticated'')';
+            end if;
+          end $$;
+
+          do $$ begin
+            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_insert_own_ann_comment') then
+              execute 'create policy rn_insert_own_ann_comment on public.rn_announcement_comments for insert with check (auth.uid() = created_by)';
+            end if;
+          end $$;
+
+          do $$ begin
+            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_delete_ann_comment') then
+              execute 'create policy rn_delete_ann_comment on public.rn_announcement_comments for delete using (auth.uid() = created_by or public.rn_is_admin(auth.uid()))';
+            end if;
+          end $$;
+          """
 
           url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
-          data = json.dumps({"query": migration_sql}).encode("utf-8")
+          data = json.dumps({"query": sql}).encode("utf-8")
           req = urllib.request.Request(url, data=data, headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -45,12 +110,8 @@ jobs:
               print("Migration OK:", resp.read().decode())
           except urllib.error.HTTPError as e:
             body = e.read().decode()
-            # 이미 존재하는 경우는 무시
-            if "already exists" in body:
-              print("Already applied, skipping.")
-            else:
-              print(f"HTTP {e.code}: {body}", file=sys.stderr)
-              sys.exit(1)
+            print(f"Migration HTTP {e.code}: {body}", file=sys.stderr)
+            sys.exit(1)
           PYEOF
 
       - name: Deploy edge functions
@@ -78,9 +139,8 @@ jobs:
             "p.id, true "
             "FROM public.rn_profiles p "
             "WHERE p.role = 'admin' "
-            "AND NOT EXISTS ("
-            "  SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 업데이트'"
-            ") LIMIT 1;"
+            "AND NOT EXISTS (SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 업데이트') "
+            "LIMIT 1;"
           )
 
           url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
@@ -91,9 +151,9 @@ jobs:
           })
           try:
             with urllib.request.urlopen(req) as resp:
-              print("Announcement created:", resp.read().decode())
+              print("Announcement:", resp.read().decode())
           except urllib.error.HTTPError as e:
             body = e.read().decode()
-            print(f"HTTP {e.code}: {body}", file=sys.stderr)
+            print(f"Announcement HTTP {e.code}: {body}", file=sys.stderr)
             sys.exit(1)
           PYEOF
