@@ -158,6 +158,7 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
     setResults([]);
     setSearchError('');
     setIsOpen(false);
+    onSelectResult(null);
   };
 
   return (

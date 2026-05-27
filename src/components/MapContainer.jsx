@@ -105,6 +105,7 @@ export default function MapContainer({
   const streetLayerRef = useRef(null);
   const shouldFollowRef = useRef(true);
   const teamMemberMarkersRef = useRef({});
+  const addressPinMarkerRef = useRef(null);
 
   useEffect(() => {
     isDrawingZoneRef.current = isDrawingZone;
@@ -238,18 +239,80 @@ export default function MapContainer({
   }, [mapInstance]);
 
   useEffect(() => {
+    if (!selectedResult && addressPinMarkerRef.current) {
+      addressPinMarkerRef.current.setMap(null);
+      addressPinMarkerRef.current = null;
+    }
+  }, [selectedResult]);
+
+  useEffect(() => {
     if (!mapInstance || !selectedResult) return;
 
     shouldFollowRef.current = false;
 
     if (selectedResult.type === 'address') {
-      const { lat, lng } = selectedResult.data;
+      const { lat, lng, name } = selectedResult.data;
       mapInstance.setCenter(new window.naver.maps.LatLng(lat, lng));
       mapInstance.setZoom(18);
+
+      if (addressPinMarkerRef.current) {
+        addressPinMarkerRef.current.setMap(null);
+        addressPinMarkerRef.current = null;
+      }
+
+      addressPinMarkerRef.current = new window.naver.maps.Marker({
+        position: new window.naver.maps.LatLng(lat, lng),
+        map: mapInstance,
+        icon: {
+          content: `
+            <div style="
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 2px;
+              pointer-events: none;
+            ">
+              <div style="
+                background: #EF4444;
+                color: white;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 3px 7px;
+                border-radius: 8px;
+                white-space: nowrap;
+                max-width: 180px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              ">${name}</div>
+              <div style="
+                width: 0;
+                height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-top: 8px solid #EF4444;
+              "></div>
+              <div style="
+                width: 10px;
+                height: 10px;
+                background: #EF4444;
+                border: 2px solid white;
+                border-radius: 50%;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              "></div>
+            </div>
+          `,
+          anchor: new window.naver.maps.Point(90, 42),
+        },
+      });
       return;
     }
 
     if (selectedResult.type === 'tip') {
+      if (addressPinMarkerRef.current) {
+        addressPinMarkerRef.current.setMap(null);
+        addressPinMarkerRef.current = null;
+      }
       const { lat, lng } = selectedResult.data;
       mapInstance.setCenter(new window.naver.maps.LatLng(lat, lng));
       mapInstance.setZoom(19);
@@ -258,6 +321,10 @@ export default function MapContainer({
     }
 
     if (selectedResult.type === 'zone') {
+      if (addressPinMarkerRef.current) {
+        addressPinMarkerRef.current.setMap(null);
+        addressPinMarkerRef.current = null;
+      }
       fitZoneOnMap(mapInstance, selectedResult.data);
       onZoneClick(selectedResult.data);
     }

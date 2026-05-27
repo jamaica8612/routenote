@@ -379,6 +379,7 @@ export default function App() {
 
   const handleSelectResult = (item) => {
     setSelectedResult(item);
+    if (!item) return;
 
     if (item.type === 'zone') {
       setSelectedZone(item.data);
