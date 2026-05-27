@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Plus, Users } from 'lucide-react';
+import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Megaphone, Plus, Users, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -57,6 +57,16 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pushPermission, setPushPermission] = useState('default');
   const [pushSaving, setPushSaving] = useState(false);
+
+  // 공지사항 상태
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementModal, setAnnouncementModal] = useState(null);
+  const [announcementForm, setAnnouncementForm] = useState({ open: false, title: '', content: '' });
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [expandedAnnId, setExpandedAnnId] = useState(null);
+  const [annComments, setAnnComments] = useState({});
+  const [annCommentInput, setAnnCommentInput] = useState('');
+  const [annCommentSaving, setAnnCommentSaving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -173,6 +183,43 @@ export default function App() {
     getPushPermissionState().then(setPushPermission);
   }, [currentUser]);
 
+  // 공지사항 구독
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const isDismissed = (id) => localStorage.getItem(`rn_ann_dismissed_${id}`) === '1';
+
+    const fetchAnnouncements = async () => {
+      const { data } = await supabase
+        .from('rn_announcements')
+        .select('*, creator:rn_profiles!created_by(name)')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const list = data || [];
+      setAnnouncements(list);
+      const undismissed = list.find((a) => !isDismissed(a.id));
+      if (undismissed) setAnnouncementModal(undismissed);
+    };
+    fetchAnnouncements();
+
+    const annChannel = supabase
+      .channel('rn_announcements_all')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rn_announcements' }, (payload) => {
+        const item = payload.new;
+        setAnnouncements((prev) => [item, ...prev]);
+        if (!isDismissed(item.id)) setAnnouncementModal(item);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rn_announcements' }, (payload) => {
+        if (!payload.new.is_active) {
+          setAnnouncements((prev) => prev.filter((a) => a.id !== payload.new.id));
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(annChannel);
+  }, [currentUser]);
+
   // Sync open tip details bottom sheet with updates from database
   useEffect(() => {
     if (selectedTip && tips.length > 0) {
@@ -277,6 +324,66 @@ export default function App() {
         .update({ is_read: true })
         .eq('recipient_id', currentUser.id)
         .eq('is_read', false);
+    }
+  };
+
+  const handleSaveAnnouncement = async () => {
+    if (!announcementForm.title.trim() || announcementSaving) return;
+    setAnnouncementSaving(true);
+    try {
+      await supabase.from('rn_announcements').insert({
+        title: announcementForm.title.trim(),
+        content: announcementForm.content.trim() || null,
+        created_by: currentUser.id,
+      });
+      setAnnouncementForm({ open: false, title: '', content: '' });
+    } catch (err) {
+      alert('공지 등록 실패: ' + err.message);
+    } finally {
+      setAnnouncementSaving(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id) => {
+    await supabase.from('rn_announcements').update({ is_active: false }).eq('id', id);
+    if (expandedAnnId === id) setExpandedAnnId(null);
+  };
+
+  const handleDismissAnnouncement = (id, permanent) => {
+    if (permanent) localStorage.setItem(`rn_ann_dismissed_${id}`, '1');
+    setAnnouncementModal(null);
+  };
+
+  const handleExpandAnn = async (id) => {
+    if (expandedAnnId === id) { setExpandedAnnId(null); return; }
+    setExpandedAnnId(id);
+    setAnnCommentInput('');
+    if (annComments[id]) return;
+    const { data } = await supabase
+      .from('rn_announcement_comments')
+      .select('*, author:rn_profiles!created_by(name)')
+      .eq('announcement_id', id)
+      .order('created_at', { ascending: true });
+    setAnnComments((prev) => ({ ...prev, [id]: data || [] }));
+  };
+
+  const handleAddAnnComment = async (announcementId) => {
+    if (!annCommentInput.trim() || annCommentSaving) return;
+    setAnnCommentSaving(true);
+    try {
+      const { data } = await supabase
+        .from('rn_announcement_comments')
+        .insert({ announcement_id: announcementId, content: annCommentInput.trim(), created_by: currentUser.id })
+        .select('*, author:rn_profiles!created_by(name)')
+        .single();
+      if (data) {
+        setAnnComments((prev) => ({ ...prev, [announcementId]: [...(prev[announcementId] || []), data] }));
+        setAnnCommentInput('');
+      }
+    } catch (err) {
+      alert('댓글 등록 실패: ' + err.message);
+    } finally {
+      setAnnCommentSaving(false);
     }
   };
 
@@ -1027,6 +1134,115 @@ export default function App() {
       case 'notifications':
         return (
           <div style={stylesNoti.container}>
+            {/* 공지사항 섹션 */}
+            <div style={stylesNoti.sectionHeader}>
+              <Megaphone size={15} color="var(--text-secondary)" />
+              <span>공지사항</span>
+              {currentUser?.role === 'admin' && (
+                <button
+                  style={stylesNoti.addAnnBtn}
+                  onClick={() => setAnnouncementForm((f) => ({ ...f, open: !f.open }))}
+                >
+                  {announcementForm.open ? '취소' : '+ 작성'}
+                </button>
+              )}
+            </div>
+
+            {announcementForm.open && currentUser?.role === 'admin' && (
+              <div style={stylesNoti.annForm}>
+                <input
+                  style={stylesNoti.annInput}
+                  placeholder="공지 제목 (필수)"
+                  maxLength={100}
+                  value={announcementForm.title}
+                  onChange={(e) => setAnnouncementForm((f) => ({ ...f, title: e.target.value }))}
+                />
+                <textarea
+                  style={stylesNoti.annTextarea}
+                  placeholder="내용 (선택, 500자 이내)"
+                  maxLength={500}
+                  rows={3}
+                  value={announcementForm.content}
+                  onChange={(e) => setAnnouncementForm((f) => ({ ...f, content: e.target.value }))}
+                />
+                <button
+                  style={stylesNoti.annSubmitBtn(announcementSaving || !announcementForm.title.trim())}
+                  disabled={announcementSaving || !announcementForm.title.trim()}
+                  onClick={handleSaveAnnouncement}
+                >
+                  {announcementSaving ? '등록 중...' : '공지 등록'}
+                </button>
+              </div>
+            )}
+
+            {announcements.length === 0 && (
+              <p style={stylesNoti.empty}>등록된 공지가 없습니다</p>
+            )}
+            {announcements.map((ann) => (
+              <div key={ann.id} style={stylesNoti.annItem}>
+                <div style={stylesNoti.annItemHeader}>
+                  <span style={stylesNoti.annTitle}>{ann.title}</span>
+                  {currentUser?.role === 'admin' && (
+                    <button style={stylesNoti.annDeleteBtn} onClick={() => handleDeleteAnnouncement(ann.id)}>
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {ann.content && <p style={stylesNoti.annContent}>{ann.content}</p>}
+                <div style={stylesNoti.annMeta}>
+                  <span style={stylesNoti.time}>
+                    {ann.creator?.name || '관리자'} ·{' '}
+                    {(() => {
+                      const diff = Math.floor((Date.now() - new Date(ann.created_at)) / 60000);
+                      if (diff < 1) return '방금 전';
+                      if (diff < 60) return `${diff}분 전`;
+                      if (diff < 1440) return `${Math.floor(diff / 60)}시간 전`;
+                      return `${Math.floor(diff / 1440)}일 전`;
+                    })()}
+                  </span>
+                  <button style={stylesNoti.annCommentToggle} onClick={() => handleExpandAnn(ann.id)}>
+                    💬 {annComments[ann.id]?.length ?? ''}댓글
+                  </button>
+                </div>
+
+                {expandedAnnId === ann.id && (
+                  <div style={stylesNoti.annCommentSection}>
+                    {(annComments[ann.id] || []).map((c) => (
+                      <div key={c.id} style={stylesNoti.annCommentItem}>
+                        <span style={stylesNoti.annCommentAuthor}>{c.author?.name || '?'}</span>
+                        <span style={stylesNoti.annCommentText}>{c.content}</span>
+                      </div>
+                    ))}
+                    {(annComments[ann.id] || []).length === 0 && (
+                      <p style={{ ...stylesNoti.time, padding: '4px 0' }}>첫 댓글을 남겨보세요</p>
+                    )}
+                    <div style={stylesNoti.annCommentForm}>
+                      <input
+                        style={stylesNoti.annCommentInput}
+                        placeholder="댓글 입력..."
+                        maxLength={300}
+                        value={annCommentInput}
+                        onChange={(e) => setAnnCommentInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAddAnnComment(ann.id)}
+                      />
+                      <button
+                        style={stylesNoti.annCommentSendBtn(annCommentSaving || !annCommentInput.trim())}
+                        disabled={annCommentSaving || !annCommentInput.trim()}
+                        onClick={() => handleAddAnnComment(ann.id)}
+                      >
+                        등록
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* 개인 알림 섹션 */}
+            <div style={{ ...stylesNoti.sectionHeader, marginTop: '8px' }}>
+              <Bell size={15} color="var(--text-secondary)" />
+              <span>내 알림</span>
+            </div>
             {!getPushSupportState().supported && (
               <div style={stylesNoti.pushNotice}>이 브라우저에서는 푸시 알림을 지원하지 않습니다.</div>
             )}
@@ -1120,6 +1336,97 @@ export default function App() {
     body: { display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 },
     message: { fontSize: '13px', color: 'var(--text-primary)', lineHeight: '1.45', margin: 0 },
     time: { fontSize: '11px', color: 'var(--text-muted)' },
+    sectionHeader: {
+      display: 'flex', alignItems: 'center', gap: '6px',
+      padding: '6px 4px 4px', fontSize: '12px', fontWeight: 700,
+      color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)',
+      marginBottom: '4px',
+    },
+    addAnnBtn: {
+      marginLeft: 'auto', fontSize: '12px', fontWeight: 700,
+      background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '0 2px',
+    },
+    annForm: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px 0' },
+    annInput: {
+      width: '100%', padding: '9px 12px', borderRadius: '10px',
+      border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)',
+      color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box',
+    },
+    annTextarea: {
+      width: '100%', padding: '9px 12px', borderRadius: '10px',
+      border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)',
+      color: 'var(--text-primary)', fontSize: '13px', resize: 'none', boxSizing: 'border-box',
+    },
+    annSubmitBtn: (disabled) => ({
+      width: '100%', minHeight: '40px', borderRadius: '10px', border: 'none',
+      backgroundColor: disabled ? 'rgba(148,163,184,0.2)' : 'var(--primary)',
+      color: disabled ? 'var(--text-muted)' : '#fff', fontSize: '13px', fontWeight: 700,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+    }),
+    annItem: {
+      padding: '12px 4px', borderBottom: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', gap: '4px',
+    },
+    annItemHeader: { display: 'flex', alignItems: 'center', gap: '6px' },
+    annTitle: { flex: 1, fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' },
+    annDeleteBtn: {
+      background: 'none', border: 'none', cursor: 'pointer',
+      color: 'var(--text-muted)', padding: '2px', display: 'flex', alignItems: 'center',
+    },
+    annContent: { fontSize: '13px', color: 'var(--text-secondary)', margin: '2px 0 0', lineHeight: 1.5 },
+    annMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' },
+    annCommentToggle: {
+      background: 'none', border: 'none', cursor: 'pointer',
+      fontSize: '12px', color: 'var(--primary)', fontWeight: 600, padding: 0,
+    },
+    annCommentSection: {
+      marginTop: '8px', padding: '8px 10px', borderRadius: '10px',
+      backgroundColor: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '6px',
+    },
+    annCommentItem: { display: 'flex', gap: '6px', alignItems: 'flex-start' },
+    annCommentAuthor: { fontSize: '12px', fontWeight: 700, color: 'var(--primary)', flexShrink: 0 },
+    annCommentText: { fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.4 },
+    annCommentForm: { display: 'flex', gap: '6px', marginTop: '4px' },
+    annCommentInput: {
+      flex: 1, padding: '7px 10px', borderRadius: '8px',
+      border: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)',
+      color: 'var(--text-primary)', fontSize: '12px',
+    },
+    annCommentSendBtn: (disabled) => ({
+      padding: '7px 12px', borderRadius: '8px', border: 'none', flexShrink: 0,
+      backgroundColor: disabled ? 'rgba(148,163,184,0.2)' : 'var(--primary)',
+      color: disabled ? 'var(--text-muted)' : '#fff', fontSize: '12px', fontWeight: 700,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+    }),
+  };
+
+  const stylesAnn = {
+    overlay: {
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: '16px',
+    },
+    modal: {
+      width: '100%', maxWidth: '360px', borderRadius: '20px',
+      backgroundColor: 'var(--bg-primary)', padding: '24px 20px',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+      display: 'flex', flexDirection: 'column', gap: '12px',
+    },
+    modalHeader: { display: 'flex', alignItems: 'center', gap: '8px' },
+    modalHeaderText: { fontSize: '13px', fontWeight: 700, color: '#F59E0B' },
+    modalTitle: { fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 },
+    modalContent: { fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 },
+    modalFooter: { display: 'flex', gap: '8px', marginTop: '4px' },
+    dismissBtn: {
+      flex: 1, minHeight: '42px', borderRadius: '12px', border: '1px solid var(--border)',
+      backgroundColor: 'transparent', color: 'var(--text-muted)', fontSize: '13px',
+      fontWeight: 600, cursor: 'pointer',
+    },
+    closeBtn: {
+      flex: 1, minHeight: '42px', borderRadius: '12px', border: 'none',
+      backgroundColor: 'var(--primary)', color: '#fff', fontSize: '13px',
+      fontWeight: 700, cursor: 'pointer',
+    },
   };
 
   const stylesShare = {
@@ -1297,6 +1604,30 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* 공지사항 시작 모달 */}
+      {announcementModal && (
+        <div style={stylesAnn.overlay}>
+          <div style={stylesAnn.modal}>
+            <div style={stylesAnn.modalHeader}>
+              <Megaphone size={18} color="#F59E0B" />
+              <span style={stylesAnn.modalHeaderText}>공지사항</span>
+            </div>
+            <h3 style={stylesAnn.modalTitle}>{announcementModal.title}</h3>
+            {announcementModal.content && (
+              <p style={stylesAnn.modalContent}>{announcementModal.content}</p>
+            )}
+            <div style={stylesAnn.modalFooter}>
+              <button style={stylesAnn.dismissBtn} onClick={() => handleDismissAnnouncement(announcementModal.id, true)}>
+                다시 보지 않기
+              </button>
+              <button style={stylesAnn.closeBtn} onClick={() => handleDismissAnnouncement(announcementModal.id, false)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isDrawingZone && !isDrawingPath && (
         <SearchBox
           onSelectResult={handleSelectResult}

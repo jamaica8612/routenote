@@ -664,6 +664,19 @@ export default function MapContainer({
       const name = member.name || '팀원';
       const initial = name.charAt(0);
 
+      // 2분 이상 업데이트 없으면 접속끊김 처리
+      const isStale = member.updated_at
+        ? Date.now() - new Date(member.updated_at).getTime() > 2 * 60 * 1000
+        : false;
+      const circleColor = isStale
+        ? 'linear-gradient(135deg, #94A3B8, #64748B)'
+        : 'linear-gradient(135deg, #10B981, #059669)';
+      const circleShadow = isStale
+        ? '0 2px 8px rgba(100,116,139,0.4)'
+        : '0 2px 8px rgba(16,185,129,0.55)';
+      const labelBg = isStale ? 'rgba(100,116,139,0.9)' : 'rgba(16,185,129,0.92)';
+      const labelText = isStale ? '접속끊김' : name;
+
       const iconContent = `
         <div style="
           position: relative;
@@ -676,9 +689,9 @@ export default function MapContainer({
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #10B981, #059669);
+            background: ${circleColor};
             border: 2.5px solid #FFFFFF;
-            box-shadow: 0 2px 8px rgba(16,185,129,0.55);
+            box-shadow: ${circleShadow};
             display: flex;
             align-items: center;
             justify-content: center;
@@ -688,7 +701,7 @@ export default function MapContainer({
           ">${initial}</div>
           <div style="
             margin-top: 3px;
-            background: rgba(16,185,129,0.92);
+            background: ${labelBg};
             color: #fff;
             font-size: 10px;
             font-weight: 600;
@@ -696,23 +709,22 @@ export default function MapContainer({
             border-radius: 6px;
             white-space: nowrap;
             box-shadow: 0 1px 4px rgba(71,85,105,0.2);
-            max-width: 72px;
+            max-width: 80px;
             overflow: hidden;
             text-overflow: ellipsis;
-          ">${name}</div>
+          ">${labelText}</div>
         </div>
       `;
 
+      const markerIcon = { content: iconContent, anchor: new window.naver.maps.Point(16, 16) };
       if (teamMemberMarkersRef.current[id]) {
         teamMemberMarkersRef.current[id].setPosition(position);
+        teamMemberMarkersRef.current[id].setIcon(markerIcon);
       } else {
         teamMemberMarkersRef.current[id] = new window.naver.maps.Marker({
           position,
           map: mapInstance,
-          icon: {
-            content: iconContent,
-            anchor: new window.naver.maps.Point(16, 16),
-          },
+          icon: markerIcon,
           zIndex: 800,
         });
       }
