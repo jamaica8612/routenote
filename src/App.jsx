@@ -190,12 +190,13 @@ export default function App() {
     const isDismissed = (id) => localStorage.getItem(`rn_ann_dismissed_${id}`) === '1';
 
     const fetchAnnouncements = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('rn_announcements')
         .select('*, creator:rn_profiles!created_by(name)')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(20);
+      if (error) console.error('[announcements] fetch error:', error);
       const list = data || [];
       setAnnouncements(list);
       const undismissed = list.find((a) => !isDismissed(a.id));
