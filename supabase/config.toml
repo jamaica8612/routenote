@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.rn-send-push]
 verify_jwt = true
+
+[functions.rn-road-geometry]
+verify_jwt = false

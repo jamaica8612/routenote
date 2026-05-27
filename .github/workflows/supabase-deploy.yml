@@ -1,0 +1,63 @@
+name: Supabase DB & Functions Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply DB migrations
+        run: supabase db push --project-ref dewusorjwzhsdhrsrvbg
+
+      - name: Deploy edge functions
+        run: |
+          supabase functions deploy rn-postcode-zone --project-ref dewusorjwzhsdhrsrvbg
+          supabase functions deploy rn-geocode --project-ref dewusorjwzhsdhrsrvbg
+          supabase functions deploy rn-road-geometry --project-ref dewusorjwzhsdhrsrvbg
+          supabase functions deploy rn-send-push --project-ref dewusorjwzhsdhrsrvbg
+
+      - name: Create announcement
+        run: |
+          python3 << 'PYEOF'
+          import json, urllib.request, os, sys
+
+          token = os.environ["SUPABASE_ACCESS_TOKEN"]
+          ref = "dewusorjwzhsdhrsrvbg"
+
+          sql = (
+            "INSERT INTO public.rn_announcements (title, content, created_by, is_active) "
+            "SELECT "
+            "  '2026.05.27 주요 업데이트', "
+            "  '• 주소 검색 시 지도에 핀 마커 표시\n"
+            "• 도로명 검색 시 전체 도로를 파란 선으로 표시 (예: 수영로)\n"
+            "• 공지사항 기능 추가 (접속 시 팝업, 댓글, 다시 보지 않기)\n"
+            "• 팀원 접속끊김 텍스트 표시\n"
+            "• 위치공유/멘션 푸시 알림 정상화', "
+            "  id, true "
+            "FROM public.rn_profiles WHERE role = 'admin' LIMIT 1;"
+          )
+
+          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
+          data = json.dumps({"query": sql}).encode("utf-8")
+          req = urllib.request.Request(url, data=data, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+          })
+          try:
+            with urllib.request.urlopen(req) as resp:
+              print("Done:", resp.read().decode())
+          except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"HTTP {e.code}: {body}", file=sys.stderr)
+            sys.exit(1)
+          PYEOF
