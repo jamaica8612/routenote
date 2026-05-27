@@ -110,30 +110,16 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
         if (trimmedQuery.length >= 2) {
           const roadName = extractRoadName(trimmedQuery);
 
-          const [geocodeResponse, roadResponse] = await Promise.all([
-            fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
-              {
-                method: 'GET',
-                headers: {
-                  apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                  authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                },
-              }
-            ),
-            roadName
-              ? fetch(
-                  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-road-geometry?name=${encodeURIComponent(roadName)}`,
-                  {
-                    method: 'GET',
-                    headers: {
-                      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                      authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                    },
-                  }
-                )
-              : Promise.resolve(null),
-          ]);
+          const geocodeResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
+            {
+              method: 'GET',
+              headers: {
+                apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              },
+            }
+          );
 
           const data = await geocodeResponse.json();
 
@@ -157,8 +143,18 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
             nextResults.push(...matchedAddresses);
           }
 
-          if (roadResponse) {
+          if (roadName) {
             try {
+              const roadResponse = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-road-geometry?name=${encodeURIComponent(roadName)}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+                    authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                  },
+                }
+              );
               const roadData = await roadResponse.json();
               onRoadGeometry?.(roadData?.ways?.length ? roadData.ways : null);
             } catch {
