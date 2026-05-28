@@ -16,16 +16,9 @@ const RESULT_META = {
   zone: { label: '구역', color: '#6366F1', icon: <Map size={16} color="#6366F1" /> },
   tip: { label: '팁', color: '#10B981', icon: <MapPin size={16} color="#10B981" /> },
   address: { label: '주소', color: '#F59E0B', icon: <Landmark size={16} color="#F59E0B" /> },
-  road: { label: '도로', color: '#3B82F6', icon: <Map size={16} color="#3B82F6" /> },
 };
 
-// 한국 도로명 패턴: 대로/순환로/로/길로 끝나는 단어 추출
-function extractRoadName(query) {
-  const match = query.match(/^(.*?(?:대로|순환로|로|길))(?:\s|$)/);
-  return match ? match[1].trim() : null;
-}
-
-export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips }) {
+export default function SearchBox({ onSelectResult, zones, tips }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -52,7 +45,6 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
       setSearchError('');
       setIsOpen(false);
       setLoading(false);
-      onRoadGeometry?.(null);
       return;
     }
 
@@ -109,8 +101,6 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
         let nextSearchError = '';
 
         if (trimmedQuery.length >= 2) {
-          const roadName = extractRoadName(trimmedQuery);
-
           const geocodeResponse = await fetch(
             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
             {
@@ -143,37 +133,6 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
 
             nextResults.push(...matchedAddresses);
           }
-
-          if (roadName) {
-            try {
-              const overpassQuery = `[out:json][timeout:30][bbox:33,124,38.6,132];way["name"="${roadName}"]["highway"];out geom;`;
-              const roadResponse = await fetch('https://overpass-api.de/api/interpreter', {
-                method: 'POST',
-                body: `data=${encodeURIComponent(overpassQuery)}`,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              });
-              const roadData = await roadResponse.json();
-              const ways = (roadData.elements ?? [])
-                .filter((el) => el.type === 'way' && Array.isArray(el.geometry))
-                .map((el) => el.geometry.map((pt) => ({ lat: pt.lat, lng: pt.lon })));
-              if (ways.length) {
-                onRoadGeometry?.(ways);
-                nextResults.push({
-                  type: 'road',
-                  id: `road-${roadName}`,
-                  title: roadName,
-                  subtitle: '도로 전체 경로 지도에 표시',
-                  data: { ways },
-                });
-              } else {
-                onRoadGeometry?.(null);
-              }
-            } catch {
-              onRoadGeometry?.(null);
-            }
-          } else {
-            onRoadGeometry?.(null);
-          }
         }
 
         setResults(nextResults);
@@ -201,7 +160,6 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
     setSearchError('');
     setIsOpen(false);
     onSelectResult(null);
-    onRoadGeometry?.(null);
   };
 
   return (
