@@ -429,35 +429,24 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
   const get = useCallback((r, c) => stalls.find((s) => s.row_idx === r && s.col_idx === c), [stalls]);
   const OUTER = '#1C3B4A';
 
-  // 절대 위치 기반 평면도
-  // 캔버스 크기
-  const W = 1100;
-  const H = 600;
+  // 20-열 통일 그리드: 모든 셀이 동일 X 좌표축 위에 정렬됨
+  const W = 1180;
+  const PAD = 14;
+  const CELL_W = (W - 2 * PAD) / 20;        // 약 57.6px
+  const COL = (i) => PAD + i * CELL_W;       // i번째 컬럼의 X 시작 위치
 
-  // 위치/크기 상수
-  const TOP_STALL_W = 64;
-  const TOP_STALL_H = 70;
-  const TOP_LEFT_X = 290; // 상단 점포 시작 X (육일상회 12호의 왼쪽)
-  const TOP_Y = 90;
-
-  const RIGHT_FAC_W = TOP_STALL_W;
-  const RIGHT_FAC_H = 28; // 시설 한 칸 높이
-  const RIGHT_FAC_X = TOP_LEFT_X;
-  const RIGHT_FAC_Y = TOP_Y + TOP_STALL_H; // 12호 점포 바로 아래
-
-  const HARYEOK_X = W - 80;
-  const HARYEOK_Y = TOP_Y + 100;
-
-  const MID_Y = 320;
-  const MID_STALL_W = 70;
-  const MID_STALL_H = 70;
-  const MID_LEFT_X = 10;
-  const HWAJANG_W = 36;
-
-  const BOT_Y = 460;
-  const BOT_H = 80;
-  const BOT_LEFT_X = 10;
-  const BOT_W = W - 20;
+  // Y 좌표 (위에서 아래로)
+  const Y_TOP   = 70;   const H_TOP   = 70;   // 상단 점포 (12호~1호)
+  const Y_F1    = 152;  const H_LBL   = 22;   // 출입구 라벨
+  const Y_F2    = 178;  const H_BOX   = 42;   // 기계실
+  const Y_F3    = 224;  // 경비실
+  const Y_F4    = 270;  // 차량출입구 라벨
+  const Y_HARY  = 178;  const H_HARY  = 88;   // 하역반 (col 19)
+  const Y_MID   = 300;  const H_MID   = 70;   // 중간 점포 (20호~13호) + 화장실
+  const Y_SANG  = 392;  const H_SANG  = 60;   // 상장 지도원실 (col 19)
+  const Y_BOT_L = 392;  // 좌측 출입구 라벨 (영산농산 위)
+  const Y_BOT   = 462;  const H_BOT   = 80;   // 하단 점포 (21호~40호)
+  const H_TOTAL = Y_BOT + H_BOT + 20;
 
   // 셀 렌더 헬퍼
   const stallBox = (cell, x, y, w, h, opts = {}) => {
@@ -512,9 +501,10 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
           background: isH ? '#FEF3C7' : '#FFFFFF',
           color: '#1C3B4A',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 13, fontWeight: 700,
+          fontSize: 12.5, fontWeight: 700,
           textAlign: 'center', lineHeight: 1.25,
           boxSizing: 'border-box', cursor: cell ? 'pointer' : 'default',
+          whiteSpace: 'pre-line',
           ...opts.style,
         }}
       >
@@ -523,13 +513,14 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
     );
   };
 
-  const labelText = (cell, text, x, y, w, h) => (
+  const labelText = (cell, text, x, y, w, h, opts = {}) => (
     <div
       style={{
         position: 'absolute', left: x, top: y, width: w, height: h,
         color: '#1C3B4A', fontSize: 13, fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         textAlign: 'center', boxSizing: 'border-box',
+        ...opts.style,
       }}
     >
       {cell?.vendor_name || text}
@@ -549,51 +540,57 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
       </div>
 
       {/* 평면도 캔버스 */}
-      <div ref={scrollRef} style={{ position: 'relative', width: W, height: H, background: '#FFFFFF' }}>
+      <div ref={scrollRef} style={{ position: 'relative', width: W, height: H_TOTAL, background: '#FFFFFF' }}>
 
-        {/* 북문 (좌상단 단독 박스) */}
-        {facilityBox(get(1, 9), '북문', 20, TOP_Y + 8, 70, 34, { key: 'bukmun' })}
+        {/* === 좌상단 외부 박스: 북문 / 공동작업장 === */}
+        {facilityBox(get(1, 9), '북문', COL(1), Y_TOP + 12, CELL_W * 1.2, 36, { key: 'bukmun' })}
+        {facilityBox(get(1, 10), '공동작업장', COL(3.5), Y_TOP, CELL_W * 2.5, 64, { key: 'gongdong' })}
 
-        {/* 공동작업장 (좌상단 단독 박스, 큼) */}
-        {facilityBox(get(1, 10), '공동작업장', 130, TOP_Y, 110, 60, { key: 'gongdong' })}
+        {/* === 상단 점포 12호~1호: col 8 ~ col 19 === */}
+        {/* col 8: 12호 (육일상회) */}
+        {stallBox(get(0, 0), COL(8), Y_TOP, CELL_W, H_TOP, { key: 't-12', r: 0, c: 0 })}
+        {/* col 9: 11호 */}
+        {stallBox(get(0, 1), COL(9), Y_TOP, CELL_W, H_TOP, { key: 't-11', r: 0, c: 1 })}
+        {/* col 10: 10호 */}
+        {stallBox(get(0, 2), COL(10), Y_TOP, CELL_W, H_TOP, { key: 't-10', r: 0, c: 2 })}
+        {/* col 11: 9호 */}
+        {stallBox(get(0, 3), COL(11), Y_TOP, CELL_W, H_TOP, { key: 't-9', r: 0, c: 3 })}
+        {/* col 12: 8호 */}
+        {stallBox(get(0, 4), COL(12), Y_TOP, CELL_W, H_TOP, { key: 't-8', r: 0, c: 4 })}
+        {/* col 13: 7호 */}
+        {stallBox(get(0, 5), COL(13), Y_TOP, CELL_W, H_TOP, { key: 't-7', r: 0, c: 5 })}
+        {/* col 14: 6호 */}
+        {stallBox(get(0, 6), COL(14), Y_TOP, CELL_W, H_TOP, { key: 't-6', r: 0, c: 6 })}
+        {/* col 15: 5호 */}
+        {stallBox(get(0, 7), COL(15), Y_TOP, CELL_W, H_TOP, { key: 't-5', r: 0, c: 7 })}
+        {/* col 16-17: 3~4호 (경북농산, 2칸) */}
+        {stallBox(get(0, 8), COL(16), Y_TOP, CELL_W * 2, H_TOP, { key: 't-34', r: 0, c: 8 })}
+        {/* col 18: 2호 (마늘나라) */}
+        {stallBox(get(0, 10), COL(18), Y_TOP, CELL_W, H_TOP, { key: 't-2', r: 0, c: 10 })}
+        {/* col 19: 1호 (생강마을) */}
+        {stallBox(get(0, 11), COL(19), Y_TOP, CELL_W, H_TOP, { key: 't-1', r: 0, c: 11 })}
 
-        {/* 상단 점포 12호 → 1호 (우측 일렬) */}
-        {/* col 0-7: 8개 단일 점포 */}
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((c, i) => (
-          stallBox(get(0, c), TOP_LEFT_X + i * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: `t-${c}`, r: 0, c })
+        {/* === 좌측 시설 (col 8): 출입구→기계실→경비실→차량출입구 === */}
+        {labelText(get(1, 0), '출입구', COL(8) - 6, Y_F1, CELL_W + 12, H_LBL, { style: { fontSize: 12, textAlign: 'right', justifyContent: 'flex-start' } })}
+        {facilityBox(get(2, 0), '기계실', COL(8), Y_F2, CELL_W, H_BOX, { key: 'gigye' })}
+        {facilityBox(get(3, 0), '경비실', COL(8), Y_F3, CELL_W, H_BOX, { key: 'gyungbi' })}
+        {labelText(get(4, 0), '차량출입구', COL(7.4), Y_F4, CELL_W * 2.2, H_LBL, { style: { fontSize: 12, justifyContent: 'flex-start' } })}
+
+        {/* === 우측 col 19: 하역반 === */}
+        {facilityBox(get(2, 11), '하역반', COL(19), Y_HARY + 14, CELL_W, H_HARY - 28, { key: 'haryeok' })}
+
+        {/* === 중간 점포 20호~13호: col 0 ~ col 7 === */}
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((c) => (
+          stallBox(get(5, c), COL(c), Y_MID, CELL_W, H_MID, { key: `m-${c}`, r: 5, c })
         ))}
-        {/* col 8: 경북농산 (3~4호) - 2칸 너비 */}
-        {stallBox(get(0, 8), TOP_LEFT_X + 8 * TOP_STALL_W, TOP_Y, TOP_STALL_W * 2, TOP_STALL_H, { key: 't-8', r: 0, c: 8 })}
-        {/* col 10: 마늘나라 (2호) */}
-        {stallBox(get(0, 10), TOP_LEFT_X + 10 * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: 't-10', r: 0, c: 10 })}
-        {/* col 11: 생강마을 (1호) */}
-        {stallBox(get(0, 11), TOP_LEFT_X + 11 * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: 't-11', r: 0, c: 11 })}
 
-        {/* 좌측 시설 (12호 점포 바로 아래) */}
-        {/* 출입구 라벨 */}
-        {labelText(get(1, 0), '출입구', RIGHT_FAC_X - 65, RIGHT_FAC_Y, 60, RIGHT_FAC_H)}
-        {/* 기계실 박스 */}
-        {facilityBox(get(2, 0), '기계실', RIGHT_FAC_X, RIGHT_FAC_Y, RIGHT_FAC_W, 50, { key: 'gigye' })}
-        {/* 경비실 박스 */}
-        {facilityBox(get(3, 0), '경비실', RIGHT_FAC_X, RIGHT_FAC_Y + 50, RIGHT_FAC_W, 50, { key: 'gyungbi' })}
-        {/* 차량출입구 (좌측 라벨, 경비실 아래) */}
-        {labelText(get(4, 0), '차량출입구', RIGHT_FAC_X - 10, RIGHT_FAC_Y + 105, 90, 28)}
-
-        {/* 하역반 (우측 단독 박스) */}
-        {facilityBox(get(2, 11), '하역반', HARYEOK_X, HARYEOK_Y, 70, 60, { key: 'haryeok' })}
-
-        {/* 중간 점포 20호 → 13호 (좌측 일렬) */}
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((c, i) => (
-          stallBox(get(5, c), MID_LEFT_X + i * MID_STALL_W, MID_Y, MID_STALL_W, MID_STALL_H, { key: `m-${c}`, r: 5, c })
-        ))}
-
-        {/* 화장실 (예천농산 13호 옆, 세로 글자) */}
+        {/* 화장실 (col 8, 중간점포와 같은 Y, 세로 글자) */}
         <div
           onClick={() => { const c = get(5, 8); c && onCellClick(c); }}
           style={{
             position: 'absolute',
-            left: MID_LEFT_X + 8 * MID_STALL_W, top: MID_Y,
-            width: HWAJANG_W, height: MID_STALL_H,
+            left: COL(8), top: Y_MID,
+            width: CELL_W, height: H_MID,
             border: `1.5px solid ${OUTER}`, background: '#FFFFFF',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', boxSizing: 'border-box',
@@ -607,23 +604,22 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
           </div>
         </div>
 
-        {/* 차량출입구 (우측 라벨, 중간 행 우측) */}
-        {labelText(get(5, 10), '차량출입구', HARYEOK_X - 30, MID_Y + 20, 120, 28)}
+        {/* === 차량출입구 (우측 라벨, 중간 점포 행 우측) === */}
+        {labelText(get(5, 10), '차량출입구', COL(15), Y_MID + 22, CELL_W * 4, H_LBL, { style: { fontWeight: 700 } })}
 
-        {/* 출입구 (좌측 하단 라벨) */}
-        {labelText(get(6, 0), '출입구', BOT_LEFT_X, BOT_Y - 30, 60, 26)}
+        {/* === 좌측 출입구 라벨 (col 0, 21호 위) === */}
+        {labelText(get(6, 0), '출입구', COL(0) - 4, Y_BOT_L + 30, CELL_W + 8, H_LBL, { style: { justifyContent: 'flex-start' } })}
 
-        {/* 상장 지도원실 (우측 단독 박스) */}
-        {facilityBox(get(6, 11), '상장\n지도원실', HARYEOK_X, BOT_Y - 30, 70, 56,
-          { key: 'sangjang', style: { fontSize: 11, whiteSpace: 'pre-line' } })}
+        {/* === 우측 col 19: 상장 지도원실 === */}
+        {facilityBox(get(6, 11), '상장\n지도원실', COL(19), Y_SANG, CELL_W, H_SANG,
+          { key: 'sangjang', style: { fontSize: 11, lineHeight: 1.25 } })}
 
-        {/* 하단 점포 21호 → 40호 (가로 전체) */}
-        {Array.from({ length: 20 }).map((_, i) => {
-          const cellW = BOT_W / 20;
-          return stallBox(get(7, i), BOT_LEFT_X + i * cellW, BOT_Y, cellW, BOT_H, {
+        {/* === 하단 점포 21호~40호: col 0 ~ col 19 === */}
+        {Array.from({ length: 20 }).map((_, i) => (
+          stallBox(get(7, i), COL(i), Y_BOT, CELL_W, H_BOT, {
             key: `b-${i}`, r: 7, c: i, small: true,
-          });
-        })}
+          })
+        ))}
       </div>
     </div>
   );
