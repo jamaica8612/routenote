@@ -448,6 +448,9 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
   const Y_BOT   = 462;  const H_BOT   = 80;   // 하단 점포 (21호~40호)
   const H_TOTAL = Y_BOT + H_BOT + 20;
 
+  // 공통 톤
+  const FONT = "'Malgun Gothic','Apple SD Gothic Neo',sans-serif";
+
   // 셀 렌더 헬퍼
   const stallBox = (cell, x, y, w, h, opts = {}) => {
     const isH = cell && highlightIds.has(cell.id);
@@ -459,32 +462,41 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
           position: 'absolute', left: x, top: y, width: w, height: h,
           border: `1.5px solid ${OUTER}`,
           background: isH ? '#FEF3C7' : (cell ? '#FFFFFF' : '#FAFAFA'),
-          color: cell ? '#0F172A' : '#CBD5E1',
+          color: cell ? OUTER : '#CBD5E1',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
-          fontSize: opts.small ? 10 : 12,
+          fontFamily: FONT,
+          fontSize: opts.small ? 10.5 : 12.5,
           fontWeight: 700,
           textAlign: 'center',
-          lineHeight: 1.2,
-          padding: '3px 2px',
+          lineHeight: 1.25,
+          padding: '4px 2px',
           boxSizing: 'border-box',
           cursor: 'pointer',
           whiteSpace: 'normal',
           overflow: 'hidden',
-          ...(isH && { outline: '2px solid #F59E0B' }),
+          transition: 'background 0.12s, transform 0.08s',
+          ...(isH && { outline: '2px solid #F59E0B', outlineOffset: -2 }),
         }}
+        onMouseEnter={(e) => { if (cell) e.currentTarget.style.background = '#F0F9FF'; }}
+        onMouseLeave={(e) => { if (cell && !isH) e.currentTarget.style.background = '#FFFFFF'; }}
         title={cell?.vendor_name || ''}
       >
         {cell ? (
           <>
-            <div>{cell.vendor_name}</div>
+            <div style={{ letterSpacing: -0.3 }}>{cell.vendor_name}</div>
             {cell.stall_number && (
-              <div style={{ fontSize: opts.small ? 9 : 10.5, fontWeight: 500, marginTop: 2 }}>
+              <div style={{
+                fontSize: opts.small ? 9.5 : 11,
+                fontWeight: 500,
+                marginTop: 3,
+                color: '#475569',
+              }}>
                 ({cell.stall_number}호)
               </div>
             )}
           </>
-        ) : '—'}
+        ) : ''}
       </div>
     );
   };
@@ -499,12 +511,14 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
           position: 'absolute', left: x, top: y, width: w, height: h,
           border: `1.5px solid ${OUTER}`,
           background: isH ? '#FEF3C7' : '#FFFFFF',
-          color: '#1C3B4A',
+          color: OUTER,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12.5, fontWeight: 700,
-          textAlign: 'center', lineHeight: 1.25,
+          fontFamily: FONT,
+          fontSize: 13, fontWeight: 700,
+          textAlign: 'center', lineHeight: 1.3,
           boxSizing: 'border-box', cursor: cell ? 'pointer' : 'default',
           whiteSpace: 'pre-line',
+          letterSpacing: -0.3,
           ...opts.style,
         }}
       >
@@ -517,9 +531,12 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
     <div
       style={{
         position: 'absolute', left: x, top: y, width: w, height: h,
-        color: '#1C3B4A', fontSize: 13, fontWeight: 700,
+        color: OUTER,
+        fontFamily: FONT,
+        fontSize: 12.5, fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         textAlign: 'center', boxSizing: 'border-box',
+        letterSpacing: -0.3,
         ...opts.style,
       }}
     >
