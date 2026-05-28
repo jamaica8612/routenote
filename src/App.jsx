@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Megaphone, Plus, Users, X } from 'lucide-react';
+import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Megaphone, Plus, ShoppingBasket, Users, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
 import MapContainer from './components/MapContainer';
+import MarketMapModal from './components/MarketMapModal';
 import PathForm from './components/PathForm';
 import RoadviewModal from './components/RoadviewModal';
 import SearchBox from './components/SearchBox';
@@ -63,6 +64,10 @@ export default function App() {
   const [announcementForm, setAnnouncementForm] = useState({ open: false, title: '', content: '' });
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [expandedAnnId, setExpandedAnnId] = useState(null);
+
+  // 시장지도 상태
+  const [marketModalOpen, setMarketModalOpen] = useState(false);
+  const [marketBuilding, setMarketBuilding] = useState('cheonggwamul');
   const [annComments, setAnnComments] = useState({});
   const [annCommentInput, setAnnCommentInput] = useState('');
   const [annCommentSaving, setAnnCommentSaving] = useState(false);
@@ -1706,6 +1711,18 @@ export default function App() {
         </button>
       )}
 
+      {!isDrawingZone && !isDrawingPath && (
+        <button
+          className="btn btn-icon map-action-btn"
+          onClick={() => { setMarketBuilding('cheonggwamul'); setMarketModalOpen(true); }}
+          aria-label="시장 지도"
+          title="반여농산물시장 지도"
+          style={styles.marketBtn}
+        >
+          <ShoppingBasket size={19} color="var(--text-primary)" strokeWidth={2.2} />
+        </button>
+      )}
+
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
           className="btn btn-icon map-action-btn"
@@ -1746,6 +1763,13 @@ export default function App() {
           onClose={() => setActiveRoadviewCoords(null)}
         />
       )}
+
+      <MarketMapModal
+        isOpen={marketModalOpen}
+        onClose={() => setMarketModalOpen(false)}
+        initialBuilding={marketBuilding}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
@@ -1800,6 +1824,24 @@ const styles = {
     padding: '0 4px',
     border: '2px solid #FFFFFF',
     boxShadow: '0 6px 14px rgba(239, 68, 68, 0.32)',
+  },
+  marketBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '136px',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
+    cursor: 'pointer',
   },
   headerLogoutBtn: {
     position: 'absolute',
