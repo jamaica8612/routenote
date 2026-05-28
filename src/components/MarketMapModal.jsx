@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Edit2, History, Save, Search, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Clock, History, Plus, Save, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const BUILDINGS = [
@@ -10,59 +10,21 @@ const BUILDINGS = [
 ];
 
 const COMPANY_COLORS = {
-  '동부청과': { bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' },
-  '부산중앙청과': { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534' },
-  '농협반여공판장': { bg: '#FFF7ED', border: '#FED7AA', text: '#9A3412' },
+  '동부청과': { bg: '#DBEAFE', border: '#93C5FD', text: '#1D4ED8', soft: '#EFF6FF' },
+  '부산중앙청과': { bg: '#FECACA', border: '#FCA5A5', text: '#B91C1C', soft: '#FEF2F2' },
+  '농협반여공판장': { bg: '#BBF7D0', border: '#86EFAC', text: '#166534', soft: '#F0FDF4' },
+};
+
+const COMPANY_SHORT = {
+  '동부청과': '동부',
+  '부산중앙청과': '중앙',
+  '농협반여공판장': '농협',
 };
 
 const SECTION_BG = '#F5F3FF';
 const SECTION_BORDER = '#C4B5FD';
 const SECTION_TEXT = '#6D28D9';
-
-function getCellStyle(cell, isHighlighted) {
-  if (!cell) return { background: 'transparent', border: 'none' };
-
-  const highlight = isHighlighted
-    ? { outline: '2px solid #F59E0B', outlineOffset: '-2px', zIndex: 2, position: 'relative' }
-    : {};
-
-  if (cell.cell_type === 'company_header') {
-    const co = COMPANY_COLORS[cell.vendor_name] || COMPANY_COLORS['동부청과'];
-    return { background: co.bg, border: `1px solid ${co.border}`, color: co.text, fontWeight: 800, fontSize: 11, ...highlight };
-  }
-  if (cell.cell_type === 'section_header') {
-    return { background: SECTION_BG, border: `1px solid ${SECTION_BORDER}`, color: SECTION_TEXT, fontWeight: 700, fontSize: 11, ...highlight };
-  }
-  if (cell.cell_type === 'walkway') {
-    return { background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#64748B', fontSize: 10, fontStyle: 'italic', ...highlight };
-  }
-  if (cell.cell_type === 'facility') {
-    return { background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 10, ...highlight };
-  }
-  if (cell.cell_type === 'label') {
-    return { background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#475569', fontSize: 10, fontWeight: 700, ...highlight };
-  }
-  if (cell.cell_type === 'stall') {
-    const co = cell.company_name ? (COMPANY_COLORS[cell.company_name] || {}) : {};
-    const baseBg = co.bg || '#FAFAFA';
-    const baseBorder = co.border || '#E2E8F0';
-    return {
-      background: isHighlighted ? '#FEF3C7' : baseBg,
-      border: `1px solid ${isHighlighted ? '#F59E0B' : baseBorder}`,
-      color: '#111827', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-      ...highlight,
-    };
-  }
-  if (cell.cell_type === 'vendor') {
-    return {
-      background: isHighlighted ? '#FEF3C7' : '#F8FAFC',
-      border: `1px solid ${isHighlighted ? '#F59E0B' : '#E2E8F0'}`,
-      color: '#374151', fontSize: 11, cursor: 'pointer',
-      ...highlight,
-    };
-  }
-  return { background: '#F8FAFC', border: '1px solid #E2E8F0', fontSize: 11, ...highlight };
-}
+const GROUP_BORDER = '#475569';
 
 function buildGrid(stalls) {
   const grid = {};
@@ -75,131 +37,419 @@ function buildGrid(stalls) {
   return { grid, maxRow, maxCol };
 }
 
-function CheonggwamulGrid({ stalls, highlightIds, onCellClick }) {
-  const { grid, maxRow, maxCol } = buildGrid(stalls);
-  const rows = [];
-  for (let r = 0; r <= maxRow; r++) {
-    const cols = [];
-    for (let c = 0; c <= maxCol; c++) {
-      const cell = grid[`${r},${c}`];
-      const isH = cell && highlightIds.has(cell.id);
-      const display = cell ? (cell.stall_number || cell.vendor_name || cell.section_name || '') : '';
-      cols.push(
-        <td
-          key={c}
-          style={{
-            ...getCellStyle(cell, isH),
-            minWidth: 40, maxWidth: 40, width: 40, height: 28,
-            padding: '2px 3px', textAlign: 'center', boxSizing: 'border-box',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            verticalAlign: 'middle',
-          }}
-          title={display}
-          onClick={() => cell && (cell.cell_type === 'stall' || cell.cell_type === 'vendor') && onCellClick(cell)}
-        >
-          {display}
-        </td>
-      );
-    }
-    rows.push(<tr key={r}>{cols}</tr>);
+function computeCompanyRanges(stalls, maxCol) {
+  const headers = stalls
+    .filter((s) => s.cell_type === 'company_header')
+    .sort((a, b) => a.col_idx - b.col_idx);
+  if (headers.length === 0) return [];
+  const ranges = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].col_idx;
+    const end = i + 1 < headers.length ? headers[i + 1].col_idx - 1 : maxCol;
+    ranges.push({ name: headers[i].vendor_name, start, end });
   }
-  return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}>
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
-        <tbody>{rows}</tbody>
-      </table>
-    </div>
-  );
+  return ranges;
 }
 
-function MubaechuGrid({ stalls, highlightIds, onCellClick }) {
-  const { grid, maxRow, maxCol } = buildGrid(stalls);
-  const rows = [];
-  for (let r = 0; r <= maxRow; r++) {
-    const cols = [];
-    for (let c = 0; c <= maxCol; c++) {
-      const cell = grid[`${r},${c}`];
-      const isH = cell && highlightIds.has(cell.id);
-      const display = cell ? (cell.vendor_name || cell.stall_number || '') : '';
-      cols.push(
-        <td
-          key={c}
-          style={{
-            ...getCellStyle(cell, isH),
-            minWidth: 72, width: 72, height: 36,
-            padding: '3px 5px', textAlign: 'center', boxSizing: 'border-box',
-            whiteSpace: 'pre-wrap', verticalAlign: 'middle', fontSize: 12,
-          }}
-          title={display}
-          onClick={() => cell && (cell.cell_type === 'stall' || cell.cell_type === 'vendor') && onCellClick(cell)}
-        >
-          {display}
-        </td>
-      );
-    }
-    rows.push(<tr key={r}>{cols}</tr>);
+function computeSectionRanges(stalls, maxCol) {
+  const headers = stalls
+    .filter((s) => s.cell_type === 'section_header')
+    .sort((a, b) => a.col_idx - b.col_idx);
+  if (headers.length === 0) return [];
+  const ranges = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].col_idx;
+    const end = i + 1 < headers.length ? headers[i + 1].col_idx - 1 : maxCol;
+    ranges.push({
+      name: headers[i].section_name,
+      company: headers[i].company_name,
+      start,
+      end,
+    });
   }
-  return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}>
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
-        <tbody>{rows}</tbody>
-      </table>
-    </div>
-  );
+  return ranges;
 }
 
-function YangnyeomGrid({ stalls, highlightIds, onCellClick }) {
-  const { grid, maxRow, maxCol } = buildGrid(stalls);
-
-  const sectionCols = [0, 2, 4, 6];
-  const sectionNames = {};
-  for (const [key, cell] of Object.entries(grid)) {
-    if (cell.section_name) sectionNames[cell.col_idx] = cell.section_name;
+function makeColMap(ranges, key = 'name') {
+  const map = {};
+  for (const r of ranges) {
+    for (let c = r.start; c <= r.end; c++) map[c] = r[key];
   }
+  return map;
+}
 
-  const headers = sectionCols.map((c) => (
-    <th key={c} style={{
-      padding: '8px 12px', background: SECTION_BG, color: SECTION_TEXT,
-      fontWeight: 700, fontSize: 12, border: `1px solid ${SECTION_BORDER}`,
-      textAlign: 'center', whiteSpace: 'pre-wrap', minWidth: 100,
-    }}>
-      {sectionNames[c] || ''}
-    </th>
-  ));
+const CELL_W = 36;
+const CELL_H = 24;
+
+function CheonggwamulGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
+  const { grid, maxRow, maxCol } = buildGrid(stalls);
+  const companyRanges = useMemo(() => computeCompanyRanges(stalls, maxCol), [stalls, maxCol]);
+  const sectionRanges = useMemo(() => computeSectionRanges(stalls, maxCol), [stalls, maxCol]);
+  const colCompany = useMemo(() => makeColMap(companyRanges), [companyRanges]);
+  const colSection = useMemo(() => makeColMap(sectionRanges), [sectionRanges]);
+
+  const headerRows = useMemo(() => {
+    const rows = new Set();
+    for (const s of stalls) {
+      if (s.cell_type === 'company_header' || s.cell_type === 'section_header') rows.add(s.row_idx);
+    }
+    return rows;
+  }, [stalls]);
+
+  const minDataRow = useMemo(() => {
+    const sectionRows = stalls
+      .filter((s) => s.cell_type === 'section_header')
+      .map((s) => s.row_idx);
+    if (sectionRows.length === 0) return 2;
+    return Math.max(...sectionRows) + 1;
+  }, [stalls]);
+
+  const sectionKeyAt = useCallback((r, c) => {
+    const cell = grid[`${r},${c}`];
+    if (cell && cell.section_name && cell.company_name && cell.cell_type !== 'section_header' && cell.cell_type !== 'company_header') {
+      return `${cell.section_name}|${cell.company_name}`;
+    }
+    return null;
+  }, [grid]);
+
+  const hasAnyBorders = useMemo(
+    () => stalls.some((s) => s.borders && (s.borders.l || s.borders.r || s.borders.t || s.borders.b)),
+    [stalls]
+  );
+
+  const totalCols = maxCol + 1;
+
+  const companyBand = (
+    <tr>
+      {Array.from({ length: totalCols }).map((_, c) => {
+        const r = companyRanges.find((x) => x.start === c);
+        if (r) {
+          const co = COMPANY_COLORS[r.name] || {};
+          return (
+            <td
+              key={c}
+              colSpan={r.end - r.start + 1}
+              style={{
+                background: co.bg,
+                color: co.text,
+                fontWeight: 800,
+                fontSize: 12,
+                textAlign: 'center',
+                padding: '8px 4px',
+                border: `1px solid ${co.border}`,
+              }}
+              data-company={r.name}
+            >
+              {r.name}
+            </td>
+          );
+        }
+        if (companyRanges.some((x) => c > x.start && c <= x.end)) return null;
+        return <td key={c} style={{ background: '#F8FAFC', height: 32 }} />;
+      })}
+    </tr>
+  );
+
+  const sectionBand = (
+    <tr>
+      {Array.from({ length: totalCols }).map((_, c) => {
+        const r = sectionRanges.find((x) => x.start === c);
+        if (r) {
+          return (
+            <td
+              key={c}
+              colSpan={r.end - r.start + 1}
+              style={{
+                background: SECTION_BG,
+                color: SECTION_TEXT,
+                fontWeight: 700,
+                fontSize: 11,
+                textAlign: 'center',
+                padding: '4px',
+                border: `1px solid ${SECTION_BORDER}`,
+              }}
+            >
+              {r.name}
+            </td>
+          );
+        }
+        if (sectionRanges.some((x) => c > x.start && c <= x.end)) return null;
+        return <td key={c} style={{ background: '#F8FAFC', height: 24, border: '1px solid #E2E8F0' }} />;
+      })}
+    </tr>
+  );
 
   const dataRows = [];
-  for (let r = 0; r <= maxRow; r++) {
-    const hasCells = sectionCols.some((c) => grid[`${r},${c}`] && grid[`${r},${c}`].cell_type !== 'section_header');
-    if (!hasCells) continue;
-    const cols = sectionCols.map((c) => {
+  for (let r = minDataRow; r <= maxRow; r++) {
+    if (headerRows.has(r)) continue;
+    const cols = [];
+    for (let c = 0; c <= maxCol; c++) {
       const cell = grid[`${r},${c}`];
-      if (!cell || cell.cell_type === 'section_header') return <td key={c} style={{ border: '1px solid #E2E8F0', minWidth: 100, height: 32 }} />;
-      const isH = highlightIds.has(cell.id);
-      return (
+      const isH = cell && highlightIds.has(cell.id);
+      const company = cell?.company_name || colCompany[c];
+      const section = cell?.section_name || colSection[c];
+      const co = COMPANY_COLORS[company] || {};
+
+      const myKey = sectionKeyAt(r, c);
+      const borders = {};
+      if (hasAnyBorders) {
+        const b = cell?.borders || {};
+        if (b.t) borders.borderTop = `2px solid ${GROUP_BORDER}`;
+        if (b.b) borders.borderBottom = `2px solid ${GROUP_BORDER}`;
+        if (b.l) borders.borderLeft = `2px solid ${GROUP_BORDER}`;
+        if (b.r) borders.borderRight = `2px solid ${GROUP_BORDER}`;
+      } else if (myKey) {
+        if (sectionKeyAt(r - 1, c) !== myKey) borders.borderTop = `2px solid ${GROUP_BORDER}`;
+        if (sectionKeyAt(r + 1, c) !== myKey) borders.borderBottom = `2px solid ${GROUP_BORDER}`;
+        if (sectionKeyAt(r, c - 1) !== myKey) borders.borderLeft = `2px solid ${GROUP_BORDER}`;
+        if (sectionKeyAt(r, c + 1) !== myKey) borders.borderRight = `2px solid ${GROUP_BORDER}`;
+      }
+
+      const isFacility = cell?.cell_type === 'facility';
+      const isWalkway = cell?.cell_type === 'walkway';
+      const display = cell ? (cell.stall_number || cell.vendor_name || '') : '';
+
+      let bg = company ? (co.soft || '#FFFFFF') : '#FFFFFF';
+      if (cell && (cell.cell_type === 'stall' || cell.cell_type === 'vendor')) bg = co.soft || '#FAFAFA';
+      if (isFacility) bg = '#FEF2F2';
+      if (isWalkway) bg = '#F1F5F9';
+      if (isH) bg = '#FEF3C7';
+
+      const baseBorder = isH
+        ? `2px solid #F59E0B`
+        : myKey
+          ? `1px solid rgba(71,85,105,0.18)`
+          : `1px dashed rgba(148,163,184,0.25)`;
+
+      const handleClick = () => {
+        if (cell) onCellClick(cell);
+        else onEmptyClick({ row_idx: r, col_idx: c, section_name: section || null, company_name: company || null });
+      };
+
+      cols.push(
         <td
           key={c}
           style={{
-            ...getCellStyle(cell, isH),
-            padding: '4px 8px', textAlign: 'center',
-            boxSizing: 'border-box', minWidth: 100, height: 32,
-            whiteSpace: 'pre-wrap', verticalAlign: 'middle',
+            width: CELL_W,
+            minWidth: CELL_W,
+            maxWidth: CELL_W,
+            height: CELL_H,
+            background: bg,
+            color: isFacility ? '#DC2626' : isWalkway ? '#64748B' : '#111827',
+            fontSize: isFacility || isWalkway ? 9 : 10,
+            fontStyle: isWalkway ? 'italic' : 'normal',
+            fontWeight: isH ? 700 : 600,
+            textAlign: 'center',
+            verticalAlign: 'middle',
+            padding: '1px 2px',
+            boxSizing: 'border-box',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            cursor: 'pointer',
+            border: baseBorder,
+            ...borders,
           }}
-          onClick={() => (cell.cell_type === 'stall' || cell.cell_type === 'vendor') && onCellClick(cell)}
+          title={display || `${section || ''} R${r}·C${c}`}
+          onClick={handleClick}
+          data-company-col={companyRanges.find((x) => x.start === c)?.name || undefined}
         >
-          {cell.vendor_name || cell.stall_number || ''}
+          {display || (cell ? '' : '')}
         </td>
       );
-    });
+    }
     dataRows.push(<tr key={r}>{cols}</tr>);
   }
 
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}>
-      <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead><tr>{headers}</tr></thead>
-        <tbody>{dataRows}</tbody>
-      </table>
-    </div>
+    <table
+      ref={scrollRef}
+      style={{
+        borderCollapse: 'collapse',
+        tableLayout: 'fixed',
+        fontSize: 11,
+        userSelect: 'none',
+      }}
+    >
+      <tbody>
+        {companyBand}
+        {sectionBand}
+        {dataRows}
+      </tbody>
+    </table>
+  );
+}
+
+function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
+  const { grid } = buildGrid(stalls);
+
+  // 데이터가 있는 열만 추출 (홀수 col_idx: 1,3,5...)
+  const dataCols = useMemo(() => {
+    const cols = new Set();
+    for (const s of stalls) {
+      if (s.cell_type !== 'label') cols.add(s.col_idx);
+    }
+    return Array.from(cols).sort((a, b) => a - b);
+  }, [stalls]);
+
+  // 데이터 행 추출
+  const dataRows = useMemo(() => {
+    const rows = new Set();
+    for (const s of stalls) rows.add(s.row_idx);
+    return Array.from(rows).sort((a, b) => a - b);
+  }, [stalls]);
+
+  // walkway 행 감지
+  const walkwaySet = useMemo(() => {
+    const s = new Set();
+    for (const st of stalls) if (st.cell_type === 'walkway') s.add(st.row_idx);
+    return s;
+  }, [stalls]);
+
+  // 연속 행을 쌍으로 묶어 그룹 파악 (walkway 사이 데이터를 2개씩 묶음)
+  // 각 행에 대해 "pair group id" 부여: 같은 section에서 짝수/홀수 인덱스
+  const rowPairId = useMemo(() => {
+    const map = {};
+    let pairId = 0;
+    let countInSection = 0;
+    for (const r of dataRows) {
+      if (walkwaySet.has(r)) { countInSection = 0; continue; }
+      const groupIdx = Math.floor(countInSection / 2);
+      map[r] = pairId + groupIdx;
+      countInSection++;
+      if (countInSection % 2 === 0) pairId++;
+    }
+    return map;
+  }, [dataRows, walkwaySet]);
+
+  const tableRows = [];
+  for (const r of dataRows) {
+    const isWalkway = walkwaySet.has(r);
+    if (isWalkway) {
+      const wCell = grid[`${r},${dataCols[0]}`];
+      tableRows.push(
+        <tr key={r}>
+          <td
+            colSpan={dataCols.length}
+            style={{
+              background: '#F1F5F9', color: '#64748B', fontStyle: 'italic',
+              fontSize: 11, textAlign: 'center', padding: '5px 8px',
+              border: '2px solid #CBD5E1', fontWeight: 700, letterSpacing: 4,
+            }}
+          >
+            {wCell?.vendor_name || '통     로'}
+          </td>
+        </tr>
+      );
+      continue;
+    }
+
+    const pairId = rowPairId[r];
+    // 이 행이 pair의 첫 번째인지 마지막인지 판별
+    const rowsInPair = dataRows.filter((x) => !walkwaySet.has(x) && rowPairId[x] === pairId);
+    const isFirst = rowsInPair[0] === r;
+    const isLast = rowsInPair[rowsInPair.length - 1] === r;
+
+    const cols = [];
+    for (const c of dataCols) {
+      const cell = grid[`${r},${c}`];
+      const isH = cell && highlightIds.has(cell.id);
+      const display = cell ? (cell.vendor_name || cell.stall_number || cell.section_name || '') : '';
+      const isVendor = cell?.cell_type === 'vendor';
+      const isStall = cell?.cell_type === 'stall';
+      const isLabelCell = cell?.cell_type === 'label' || cell?.cell_type === 'section_header';
+
+      let bg = '#FFFFFF';
+      let color = '#374151';
+      let fw = 600;
+      if (isVendor) { bg = '#EFF6FF'; color = '#1E40AF'; fw = 700; }
+      if (isStall) { bg = '#F0FDF4'; color = '#166534'; fw = 700; }
+      if (isLabelCell) { bg = SECTION_BG; color = SECTION_TEXT; fw = 700; }
+      if (isH) { bg = '#FEF3C7'; }
+
+      const borderStyle = {
+        borderLeft: `2px solid ${GROUP_BORDER}`,
+        borderRight: `2px solid ${GROUP_BORDER}`,
+        ...(isFirst ? { borderTop: `2px solid ${GROUP_BORDER}` } : { borderTop: '1px dashed #CBD5E1' }),
+        ...(isLast ? { borderBottom: `2px solid ${GROUP_BORDER}` } : {}),
+      };
+
+      cols.push(
+        <td
+          key={c}
+          style={{
+            width: 80, minWidth: 80, height: 28,
+            background: bg, color, fontWeight: fw,
+            fontSize: 11, textAlign: 'center', verticalAlign: 'middle',
+            padding: '2px 4px', boxSizing: 'border-box',
+            cursor: 'pointer',
+            ...(isH ? { outline: '2px solid #F59E0B' } : borderStyle),
+          }}
+          title={display}
+          onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: r, col_idx: c })}
+        >
+          {display}
+        </td>
+      );
+    }
+    tableRows.push(<tr key={r}>{cols}</tr>);
+  }
+
+  return (
+    <table ref={scrollRef} style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
+      <tbody>{tableRows}</tbody>
+    </table>
+  );
+}
+
+function GenericGrid({ stalls, highlightIds, onCellClick, onEmptyClick, minCellW = 56, scrollRef }) {
+  const { grid, maxRow, maxCol } = buildGrid(stalls);
+  const rows = [];
+  for (let r = 0; r <= maxRow; r++) {
+    const cols = [];
+    for (let c = 0; c <= maxCol; c++) {
+      const cell = grid[`${r},${c}`];
+      const isH = cell && highlightIds.has(cell.id);
+      const display = cell ? (cell.vendor_name || cell.stall_number || cell.section_name || '') : '';
+      const isStall = cell?.cell_type === 'stall' || cell?.cell_type === 'vendor';
+      const isHeader = cell?.cell_type === 'section_header' || cell?.cell_type === 'label';
+      const isFacility = cell?.cell_type === 'facility';
+      const isWalkway = cell?.cell_type === 'walkway';
+
+      let bg = '#FFFFFF';
+      let color = '#111827';
+      let fontWeight = 600;
+      if (isHeader) { bg = SECTION_BG; color = SECTION_TEXT; fontWeight = 700; }
+      if (isFacility) { bg = '#FEF2F2'; color = '#DC2626'; }
+      if (isWalkway) { bg = '#F1F5F9'; color = '#64748B'; }
+      if (isH) { bg = '#FEF3C7'; }
+
+      cols.push(
+        <td
+          key={c}
+          style={{
+            width: minCellW, minWidth: minCellW, maxWidth: minCellW, height: 32,
+            background: bg, color, fontWeight,
+            fontSize: 11, fontStyle: isWalkway ? 'italic' : 'normal',
+            textAlign: 'center', verticalAlign: 'middle',
+            padding: '2px 4px', boxSizing: 'border-box',
+            whiteSpace: 'pre-wrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            cursor: 'pointer',
+            border: isH ? '2px solid #F59E0B' : '1px solid #E2E8F0',
+          }}
+          title={display}
+          onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: r, col_idx: c, section_name: null, company_name: null })}
+        >
+          {display}
+        </td>
+      );
+    }
+    rows.push(<tr key={r}>{cols}</tr>);
+  }
+  return (
+    <table ref={scrollRef} style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
+      <tbody>{rows}</tbody>
+    </table>
   );
 }
 
@@ -213,15 +463,18 @@ function EmptyBuilding({ name }) {
   );
 }
 
-function EditModal({ cell, currentUser, onClose, onSaved }) {
+function EditModal({ cell, buildingId, currentUser, onClose, onSaved }) {
+  const isInsert = !cell.id;
   const [vendorName, setVendorName] = useState(cell.vendor_name || '');
   const [stallNumber, setStallNumber] = useState(cell.stall_number || '');
   const [notes, setNotes] = useState(cell.notes || '');
+  const [cellType, setCellType] = useState(cell.cell_type || 'stall');
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
+    if (isInsert) return;
     supabase
       .from('rn_market_stall_history')
       .select('*, changer:rn_profiles(name)')
@@ -229,30 +482,55 @@ function EditModal({ cell, currentUser, onClose, onSaved }) {
       .order('changed_at', { ascending: false })
       .limit(10)
       .then(({ data }) => data && setHistory(data));
-  }, [cell.id]);
+  }, [cell.id, isInsert]);
 
   const handleSave = async () => {
     setSaving(true);
+    if (isInsert) {
+      const payload = {
+        building_id: buildingId,
+        row_idx: cell.row_idx,
+        col_idx: cell.col_idx,
+        stall_number: stallNumber || null,
+        vendor_name: vendorName || null,
+        section_name: cell.section_name || null,
+        company_name: cell.company_name || null,
+        cell_type: cellType,
+        notes: notes || null,
+      };
+      const { data, error } = await supabase
+        .from('rn_market_stalls')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) { alert('추가 실패: ' + error.message); setSaving(false); return; }
+      if (currentUser?.id && !String(currentUser.id).startsWith('preview-')) {
+        await supabase.from('rn_market_stall_history').insert({
+          stall_id: data.id, changed_by: currentUser.id, change_type: 'create',
+          old_data: null, new_data: payload,
+        });
+      }
+      setSaving(false);
+      onSaved(data);
+      return;
+    }
+
     const oldData = { vendor_name: cell.vendor_name, stall_number: cell.stall_number, notes: cell.notes };
     const newData = { vendor_name: vendorName || null, stall_number: stallNumber || null, notes: notes || null };
-
     const { error } = await supabase
       .from('rn_market_stalls')
-      .update({ vendor_name: newData.vendor_name, stall_number: newData.stall_number, notes: newData.notes, updated_at: new Date().toISOString() })
+      .update({ ...newData, updated_at: new Date().toISOString() })
       .eq('id', cell.id);
-
     if (error) { alert('저장 실패: ' + error.message); setSaving(false); return; }
 
-    await supabase.from('rn_market_stall_history').insert({
-      stall_id: cell.id,
-      changed_by: currentUser.id,
-      change_type: 'update',
-      old_data: oldData,
-      new_data: newData,
-    });
-
+    if (currentUser?.id && !String(currentUser.id).startsWith('preview-')) {
+      await supabase.from('rn_market_stall_history').insert({
+        stall_id: cell.id, changed_by: currentUser.id, change_type: 'update',
+        old_data: oldData, new_data: newData,
+      });
+    }
     setSaving(false);
-    onSaved({ ...cell, vendor_name: newData.vendor_name, stall_number: newData.stall_number, notes: newData.notes });
+    onSaved({ ...cell, ...newData });
   };
 
   return (
@@ -262,12 +540,27 @@ function EditModal({ cell, currentUser, onClose, onSaved }) {
           <span style={editStyles.title}>
             {cell.section_name && <span style={editStyles.badge}>{cell.section_name}</span>}
             {cell.company_name && <span style={{ ...editStyles.badge, background: '#EFF6FF', color: '#1D4ED8' }}>{cell.company_name}</span>}
-            {cell.cell_type === 'stall' ? '호수 수정' : '상호 수정'}
+            {isInsert ? '셀 추가' : (cell.cell_type === 'stall' ? '호수 수정' : '상호 수정')}
           </span>
           <button style={editStyles.closeBtn} onClick={onClose}><X size={18} /></button>
         </div>
 
         <div style={editStyles.fields}>
+          {isInsert && (
+            <>
+              <label style={editStyles.label}>셀 유형</label>
+              <select
+                style={editStyles.input}
+                value={cellType}
+                onChange={(e) => setCellType(e.target.value)}
+              >
+                <option value="stall">호수 (stall)</option>
+                <option value="vendor">상호 (vendor)</option>
+                <option value="facility">시설 (facility)</option>
+                <option value="walkway">통로 (walkway)</option>
+              </select>
+            </>
+          )}
           <label style={editStyles.label}>호수</label>
           <input
             style={editStyles.input}
@@ -292,17 +585,19 @@ function EditModal({ cell, currentUser, onClose, onSaved }) {
         </div>
 
         <div style={editStyles.footer}>
-          <button style={editStyles.historyBtn} onClick={() => setShowHistory(!showHistory)}>
-            <History size={14} />
-            수정이력
-          </button>
+          {!isInsert && (
+            <button style={editStyles.historyBtn} onClick={() => setShowHistory(!showHistory)}>
+              <History size={14} />
+              수정이력
+            </button>
+          )}
           <button style={editStyles.saveBtn(saving)} disabled={saving} onClick={handleSave}>
             <Save size={14} />
-            {saving ? '저장 중...' : '저장'}
+            {saving ? '저장 중...' : (isInsert ? '추가' : '저장')}
           </button>
         </div>
 
-        {showHistory && (
+        {showHistory && !isInsert && (
           <div style={editStyles.historyPanel}>
             {history.length === 0 && <div style={editStyles.historyEmpty}>수정이력 없음</div>}
             {history.map((h) => (
@@ -338,6 +633,10 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCell, setEditingCell] = useState(null);
+  const [zoom, setZoom] = useState(1);
+
+  const scrollWrapRef = useRef(null);
+  const tableRef = useRef(null);
 
   useEffect(() => {
     if (initialBuilding) setActiveBuilding(initialBuilding);
@@ -382,6 +681,7 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
   }, [isOpen, activeBuilding, stallsByBuilding]);
 
   const stalls = stallsByBuilding[activeBuilding] || [];
+  const activeBuildingRow = buildings.find((b) => b.code === activeBuilding);
 
   const lowerQ = searchQuery.trim().toLowerCase();
   const highlightIds = new Set(
@@ -394,18 +694,45 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
       : []
   );
 
+  const companyRanges = useMemo(() => {
+    if (activeBuilding !== 'cheonggwamul') return [];
+    const maxCol = stalls.reduce((m, s) => Math.max(m, s.col_idx), 0);
+    return computeCompanyRanges(stalls, maxCol);
+  }, [stalls, activeBuilding]);
+
   const handleCellClick = (cell) => {
     if (currentUser?.role === 'viewer') return;
     setEditingCell(cell);
   };
 
+  const handleEmptyClick = (payload) => {
+    if (currentUser?.role === 'viewer') return;
+    setEditingCell(payload);
+  };
+
   const handleSaved = (updatedCell) => {
-    setStallsByBuilding((prev) => ({
-      ...prev,
-      [activeBuilding]: (prev[activeBuilding] || []).map((s) => s.id === updatedCell.id ? updatedCell : s),
-    }));
+    setStallsByBuilding((prev) => {
+      const list = prev[activeBuilding] || [];
+      const exists = list.find((s) => s.id === updatedCell.id);
+      const next = exists
+        ? list.map((s) => (s.id === updatedCell.id ? updatedCell : s))
+        : [...list, updatedCell];
+      return { ...prev, [activeBuilding]: next };
+    });
     setEditingCell(null);
   };
+
+  const jumpToCompany = (name) => {
+    if (!scrollWrapRef.current || !tableRef.current) return;
+    const r = companyRanges.find((x) => x.name === name);
+    if (!r) return;
+    const left = r.start * CELL_W * zoom;
+    scrollWrapRef.current.scrollTo({ left: Math.max(0, left - 12), behavior: 'smooth' });
+  };
+
+  const zoomIn = () => setZoom((z) => Math.min(1.6, +(z + 0.2).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(0.4, +(z - 0.2).toFixed(2)));
+  const zoomReset = () => setZoom(1);
 
   if (!isOpen) return null;
 
@@ -415,9 +742,7 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <span style={styles.headerTitle}>반여농산물시장</span>
-          </div>
+          <span style={styles.headerTitle}>반여농산물시장</span>
           <button style={styles.closeBtn} onClick={onClose}><X size={20} /></button>
         </div>
 
@@ -437,7 +762,7 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
           <Search size={15} color="#94A3B8" style={{ flexShrink: 0 }} />
           <input
             style={styles.searchInput}
-            placeholder="호수, 상호명, 구역 검색..."
+            placeholder="검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -449,28 +774,90 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
           )}
         </div>
 
-        <div style={styles.gridContainer}>
+        {activeBuilding === 'cheonggwamul' && companyRanges.length > 0 && (
+          <div style={styles.companyNav}>
+            {companyRanges.map((r) => {
+              const co = COMPANY_COLORS[r.name] || {};
+              return (
+                <button
+                  key={r.name}
+                  style={{
+                    ...styles.companyBtn,
+                    background: co.bg,
+                    color: co.text,
+                    borderColor: co.border,
+                  }}
+                  onClick={() => jumpToCompany(r.name)}
+                >
+                  {COMPANY_SHORT[r.name] || r.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={styles.gridContainer} ref={scrollWrapRef}>
           {loading && <div style={styles.loading}>데이터 불러오는 중...</div>}
           {!loading && stalls.length === 0 && <EmptyBuilding name={buildingNames[activeBuilding] || activeBuilding} />}
-          {!loading && stalls.length > 0 && activeBuilding === 'cheonggwamul' && (
-            <CheonggwamulGrid stalls={stalls} highlightIds={highlightIds} onCellClick={handleCellClick} />
-          )}
-          {!loading && stalls.length > 0 && activeBuilding === 'mubaechu' && (
-            <MubaechuGrid stalls={stalls} highlightIds={highlightIds} onCellClick={handleCellClick} />
-          )}
-          {!loading && stalls.length > 0 && (activeBuilding === 'yangnyeom' || activeBuilding === 'hwahwe') && (
-            <YangnyeomGrid stalls={stalls} highlightIds={highlightIds} onCellClick={handleCellClick} />
+          {!loading && stalls.length > 0 && (
+            <div
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top left',
+                transition: 'transform 0.15s ease',
+                touchAction: 'pinch-zoom',
+                display: 'inline-block',
+                padding: '4px',
+              }}
+            >
+              {activeBuilding === 'cheonggwamul' ? (
+                <CheonggwamulGrid
+                  stalls={stalls}
+                  highlightIds={highlightIds}
+                  onCellClick={handleCellClick}
+                  onEmptyClick={handleEmptyClick}
+                  scrollRef={tableRef}
+                />
+              ) : activeBuilding === 'mubaechu' ? (
+                <MubaechuGrid
+                  stalls={stalls}
+                  highlightIds={highlightIds}
+                  onCellClick={handleCellClick}
+                  onEmptyClick={handleEmptyClick}
+                  scrollRef={tableRef}
+                />
+              ) : (
+                <GenericGrid
+                  stalls={stalls}
+                  highlightIds={highlightIds}
+                  onCellClick={handleCellClick}
+                  onEmptyClick={handleEmptyClick}
+                  minCellW={100}
+                  scrollRef={tableRef}
+                />
+              )}
+            </div>
           )}
         </div>
 
-        {currentUser?.role !== 'viewer' && (
-          <div style={styles.hint}>셀을 클릭하면 수정할 수 있습니다</div>
-        )}
+        <div style={styles.bottomBar}>
+          <div style={styles.zoomGroup}>
+            <button style={styles.zoomBtn} onClick={zoomOut} aria-label="zoom out"><ZoomOut size={14} /></button>
+            <button style={styles.zoomLabel} onClick={zoomReset}>{Math.round(zoom * 100)}%</button>
+            <button style={styles.zoomBtn} onClick={zoomIn} aria-label="zoom in"><ZoomIn size={14} /></button>
+          </div>
+          {currentUser?.role !== 'viewer' && (
+            <span style={styles.hintInline}>
+              <Plus size={11} style={{ verticalAlign: '-2px' }} /> 빈 칸 클릭으로 추가 · 셀 클릭으로 수정
+            </span>
+          )}
+        </div>
       </div>
 
       {editingCell && (
         <EditModal
           cell={editingCell}
+          buildingId={activeBuildingRow?.id}
           currentUser={currentUser}
           onClose={() => setEditingCell(null)}
           onSaved={handleSaved}
@@ -497,7 +884,6 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '16px 20px 12px', borderBottom: '1px solid #F1F5F9', flexShrink: 0,
   },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 17, fontWeight: 800, color: '#111827' },
   closeBtn: {
     width: 34, height: 34, borderRadius: '50%', border: 'none',
@@ -516,7 +902,7 @@ const styles = {
   }),
   searchRow: {
     display: 'flex', alignItems: 'center', gap: 8,
-    margin: '0 16px 10px', padding: '8px 12px',
+    margin: '0 16px 8px', padding: '8px 12px',
     backgroundColor: '#F8FAFC', borderRadius: 12,
     border: '1px solid #E2E8F0', flexShrink: 0,
   },
@@ -533,19 +919,45 @@ const styles = {
     flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#F59E0B',
     backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: 12,
   },
-  gridContainer: { flex: 1, overflow: 'hidden', padding: '0 8px 8px' },
-  loading: { padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14 },
-  hint: {
-    padding: '6px 16px 10px', textAlign: 'center',
-    fontSize: 11, color: '#94A3B8', flexShrink: 0,
+  companyNav: {
+    display: 'flex', gap: 6, padding: '0 16px 8px', flexShrink: 0, overflowX: 'auto',
   },
+  companyBtn: {
+    padding: '6px 12px', borderRadius: 10, fontSize: 12, fontWeight: 700,
+    border: '1px solid', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+  },
+  gridContainer: {
+    flex: 1, overflow: 'auto', padding: '0 8px 8px',
+    WebkitOverflowScrolling: 'touch',
+  },
+  loading: { padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14 },
+  bottomBar: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '8px 16px 12px', borderTop: '1px solid #F1F5F9', flexShrink: 0,
+    gap: 12,
+  },
+  zoomGroup: {
+    display: 'flex', alignItems: 'center', gap: 4,
+    background: '#F1F5F9', padding: 3, borderRadius: 10,
+  },
+  zoomBtn: {
+    width: 28, height: 26, borderRadius: 7, border: 'none', cursor: 'pointer',
+    background: '#FFFFFF', color: '#475569',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+  zoomLabel: {
+    minWidth: 44, height: 26, padding: '0 6px', borderRadius: 7, border: 'none',
+    background: 'transparent', color: '#475569',
+    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+  },
+  hintInline: { fontSize: 11, color: '#94A3B8', textAlign: 'right' },
 };
 
 const editStyles = {
   overlay: {
     position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 9100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-    padding: '0 0 0 0',
   },
   modal: {
     width: '100%', maxWidth: 480, backgroundColor: '#FFFFFF',

@@ -1575,6 +1575,18 @@ export default function App() {
     },
   };
 
+  // 임시 미리보기: 인증 단계를 건너뛰고 모달만 표시
+  if (true) {
+    return (
+      <MarketMapModal
+        isOpen={marketModalOpen}
+        onClose={() => setMarketModalOpen(false)}
+        initialBuilding={marketBuilding}
+        currentUser={{ id: 'preview-user', name: '미리보기 사용자' }}
+      />
+    );
+  }
+
   if (authLoading) {
     return (
       <div style={styles.loaderContainer}>
@@ -1594,7 +1606,16 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <AuthScreen onDemoLogin={handleDemoLogin} />;
+    // 임시 미리보기: 로그인 없이 MarketMapModal만 표시
+    return (
+      <MarketMapModal
+        isOpen={marketModalOpen}
+        onClose={() => setMarketModalOpen(false)}
+        initialBuilding={marketBuilding}
+        currentUser={{ id: 'preview-user', name: '미리보기 사용자' }}
+      />
+    );
+    // return <AuthScreen onDemoLogin={handleDemoLogin} />;
   }
 
   const visibleZoneIds = new Set([
