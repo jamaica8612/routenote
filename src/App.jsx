@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Megaphone, Plus, ShoppingBasket, Users, X } from 'lucide-react';
+import { Bell, CheckCircle2, Compass, Locate, LogOut, MapPin, Megaphone, Plus, Users, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
@@ -66,7 +66,7 @@ export default function App() {
   const [expandedAnnId, setExpandedAnnId] = useState(null);
 
   // 시장지도 상태
-  const [marketModalOpen, setMarketModalOpen] = useState(false);
+  const [marketModalOpen, setMarketModalOpen] = useState(true);
   const [marketBuilding, setMarketBuilding] = useState('cheonggwamul');
   const [annComments, setAnnComments] = useState({});
   const [annCommentInput, setAnnCommentInput] = useState('');
@@ -1711,17 +1711,6 @@ export default function App() {
         </button>
       )}
 
-      {!isDrawingZone && !isDrawingPath && (
-        <button
-          className="btn btn-icon map-action-btn"
-          onClick={() => { setMarketBuilding('cheonggwamul'); setMarketModalOpen(true); }}
-          aria-label="시장 지도"
-          title="반여농산물시장 지도"
-          style={styles.marketBtn}
-        >
-          <ShoppingBasket size={19} color="var(--text-primary)" strokeWidth={2.2} />
-        </button>
-      )}
 
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
