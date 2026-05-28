@@ -283,7 +283,7 @@ function CheonggwamulGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scr
 function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
   const { grid } = buildGrid(stalls);
 
-  // 데이터가 있는 열만 추출
+  // 데이터가 있는 열만 추출 (라벨 행 제외)
   const dataCols = useMemo(() => {
     const cols = new Set();
     for (const s of stalls) {
@@ -292,41 +292,39 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
     return Array.from(cols).sort((a, b) => a - b);
   }, [stalls]);
 
-  // 데이터 행 추출
+  // 데이터 행 (label 제외)
   const dataRows = useMemo(() => {
     const rows = new Set();
-    for (const s of stalls) rows.add(s.row_idx);
+    for (const s of stalls) {
+      if (s.cell_type !== 'label') rows.add(s.row_idx);
+    }
     return Array.from(rows).sort((a, b) => a - b);
   }, [stalls]);
 
-  // walkway 행 감지
   const walkwaySet = useMemo(() => {
     const s = new Set();
     for (const st of stalls) if (st.cell_type === 'walkway') s.add(st.row_idx);
     return s;
   }, [stalls]);
 
-  // 연속 행을 쌍으로 묶어 그룹 파악 (walkway 사이 데이터를 2개씩 묶음)
-  const rowPairId = useMemo(() => {
-    const map = {};
-    let pairId = 0;
-    let countInSection = 0;
-    for (const r of dataRows) {
-      if (walkwaySet.has(r)) { countInSection = 0; continue; }
-      const groupIdx = Math.floor(countInSection / 2);
-      map[r] = pairId + groupIdx;
-      countInSection++;
-      if (countInSection % 2 === 0) pairId++;
-    }
-    return map;
-  }, [dataRows, walkwaySet]);
+  // 라벨 셀 (무배추동 제목)
+  const labelCell = useMemo(() => stalls.find((s) => s.cell_type === 'label'), [stalls]);
 
-  const STALL_W = 84;
-  const CARD_BORDER = '#94A3B8';
+  const STALL_W = 88;
+  const OUTER = '#1F2937';   // 검정 외곽선
+  const INNER = '#94A3B8';   // 회색 내부선
+  const TITLE_BG = '#FEF3C7';     // 노랑 (제목)
+  const TITLE_BORDER = '#D97706'; // 진한 노랑
+  const WALK_BG = '#D1FAE5';      // 연두 (통로)
 
   const tableRows = [];
-  for (const r of dataRows) {
+  const totalRows = dataRows.length;
+
+  dataRows.forEach((r, rowIdx) => {
     const isWalkway = walkwaySet.has(r);
+    const isFirstRow = rowIdx === 0;
+    const isLastRow = rowIdx === totalRows - 1;
+
     if (isWalkway) {
       const wCell = grid[`${r},${dataCols[0]}`];
       tableRows.push(
@@ -334,66 +332,61 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
           <td
             colSpan={dataCols.length}
             style={{
-              background: 'linear-gradient(90deg,#F8FAFC 0%,#E2E8F0 50%,#F8FAFC 100%)',
-              color: '#64748B', fontSize: 10, textAlign: 'center',
-              padding: '6px 8px', fontWeight: 600, letterSpacing: 6,
-              borderTop: 'none', borderBottom: 'none',
+              background: WALK_BG,
+              color: '#065F46',
+              fontSize: 11, textAlign: 'center',
+              padding: '7px 8px', fontWeight: 700, letterSpacing: 8,
+              borderLeft: `2px solid ${OUTER}`,
+              borderRight: `2px solid ${OUTER}`,
+              borderTop: `1px solid ${INNER}`,
+              borderBottom: `1px solid ${INNER}`,
             }}
           >
-            ─ ─ ─ {wCell?.vendor_name || '통로'} ─ ─ ─
+            {wCell?.vendor_name || '통    로'}
           </td>
         </tr>
       );
-      continue;
+      return;
     }
 
-    const pairId = rowPairId[r];
-    const rowsInPair = dataRows.filter((x) => !walkwaySet.has(x) && rowPairId[x] === pairId);
-    const isFirst = rowsInPair[0] === r;
-    const isLast = rowsInPair[rowsInPair.length - 1] === r;
-
     const cols = [];
-    for (const c of dataCols) {
+    dataCols.forEach((c, colIdx) => {
       const cell = grid[`${r},${c}`];
       const isH = cell && highlightIds.has(cell.id);
       const display = cell ? (cell.vendor_name || cell.stall_number || cell.section_name || '') : '';
       const isVendor = cell?.cell_type === 'vendor';
       const isStall = cell?.cell_type === 'stall';
+      const isEmpty = !cell;
+
+      const isFirstCol = colIdx === 0;
+      const isLastCol = colIdx === dataCols.length - 1;
+
+      // 외곽선: 표의 가장자리만 굵게
+      const borderTop = isFirstRow ? `2px solid ${OUTER}` : `1px solid ${INNER}`;
+      const borderBottom = isLastRow ? `2px solid ${OUTER}` : `1px solid ${INNER}`;
+      const borderLeft = isFirstCol ? `2px solid ${OUTER}` : `1px solid ${INNER}`;
+      const borderRight = isLastCol ? `2px solid ${OUTER}` : `1px solid ${INNER}`;
 
       let bg = '#FFFFFF';
-      let color = '#475569';
+      let color = '#111827';
       let fw = 600;
-      let fs = 11;
-      if (isVendor) { bg = '#FFFFFF'; color = '#0F172A'; fw = 700; fs = 11; }
-      if (isStall) { bg = '#FAFAFA'; color = '#0F766E'; fw = 800; fs = 13; }
-      if (isH) { bg = '#FEF3C7'; }
-
-      // 카드 박스 스타일: pair의 첫 행은 top border, 마지막 행은 bottom border
-      const cardStyle = {
-        borderLeft: `1.5px solid ${CARD_BORDER}`,
-        borderRight: `1.5px solid ${CARD_BORDER}`,
-        ...(isFirst ? { borderTop: `1.5px solid ${CARD_BORDER}` } : { borderTop: '1px solid #F1F5F9' }),
-        ...(isLast ? {
-          borderBottom: `1.5px solid ${CARD_BORDER}`,
-          boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
-        } : {}),
-      };
-
-      const isEmpty = !cell;
+      let fs = isStall ? 12 : 11;
+      if (isEmpty) bg = '#FAFAFA';
+      if (isH) bg = '#FEF3C7';
 
       cols.push(
         <td
           key={c}
           style={{
-            width: STALL_W, minWidth: STALL_W, height: isStall ? 30 : 28,
-            background: isEmpty ? '#F8FAFC' : bg,
-            color: isEmpty ? '#CBD5E1' : color,
-            fontWeight: fw, fontSize: fs,
+            width: STALL_W, minWidth: STALL_W,
+            height: isVendor ? 36 : 30,
+            background: bg, color, fontWeight: fw, fontSize: fs,
             textAlign: 'center', verticalAlign: 'middle',
             padding: '2px 6px', boxSizing: 'border-box',
-            cursor: 'pointer', transition: 'background 0.12s',
+            cursor: 'pointer',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            ...(isH ? { outline: '2px solid #F59E0B', outlineOffset: '-2px' } : cardStyle),
+            borderTop, borderBottom, borderLeft, borderRight,
+            ...(isH && { outline: '2px solid #F59E0B', outlineOffset: '-2px' }),
           }}
           title={display}
           onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: r, col_idx: c })}
@@ -401,14 +394,34 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
           {display}
         </td>
       );
-    }
+    });
     tableRows.push(<tr key={r}>{cols}</tr>);
-  }
+  });
 
   return (
-    <table ref={scrollRef} style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
-      <tbody>{tableRows}</tbody>
-    </table>
+    <div style={{ display: 'inline-block' }}>
+      {/* 노란 제목 배너 */}
+      <div
+        style={{
+          background: TITLE_BG,
+          color: '#78350F',
+          border: `2px solid ${TITLE_BORDER}`,
+          borderRadius: 4,
+          padding: '10px 16px',
+          fontSize: 16,
+          fontWeight: 800,
+          textAlign: 'center',
+          letterSpacing: 4,
+          marginBottom: 8,
+          width: STALL_W * dataCols.length - 4,
+        }}
+      >
+        {labelCell?.vendor_name || '무배추동'}
+      </div>
+      <table ref={scrollRef} style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
+        <tbody>{tableRows}</tbody>
+      </table>
+    </div>
   );
 }
 
