@@ -1048,20 +1048,10 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <span style={styles.headerTitle}>반여농산물시장</span>
+          <span style={styles.headerTitle}>
+            반여농산물시장 · {buildingNames[activeBuilding] || activeBuilding}
+          </span>
           <button style={styles.closeBtn} onClick={onClose}><X size={20} /></button>
-        </div>
-
-        <div style={styles.tabs}>
-          {BUILDINGS.map((b) => (
-            <button
-              key={b.code}
-              style={styles.tab(activeBuilding === b.code)}
-              onClick={() => { setActiveBuilding(b.code); setSearchQuery(''); }}
-            >
-              {buildingNames[b.code] || b.name}
-            </button>
-          ))}
         </div>
 
         <div style={styles.searchRow}>
