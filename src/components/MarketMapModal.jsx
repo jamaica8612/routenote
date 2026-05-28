@@ -283,7 +283,7 @@ function CheonggwamulGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scr
 function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
   const { grid } = buildGrid(stalls);
 
-  // 데이터가 있는 열만 추출 (홀수 col_idx: 1,3,5...)
+  // 데이터가 있는 열만 추출
   const dataCols = useMemo(() => {
     const cols = new Set();
     for (const s of stalls) {
@@ -307,7 +307,6 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
   }, [stalls]);
 
   // 연속 행을 쌍으로 묶어 그룹 파악 (walkway 사이 데이터를 2개씩 묶음)
-  // 각 행에 대해 "pair group id" 부여: 같은 section에서 짝수/홀수 인덱스
   const rowPairId = useMemo(() => {
     const map = {};
     let pairId = 0;
@@ -322,6 +321,9 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
     return map;
   }, [dataRows, walkwaySet]);
 
+  const STALL_W = 84;
+  const CARD_BORDER = '#94A3B8';
+
   const tableRows = [];
   for (const r of dataRows) {
     const isWalkway = walkwaySet.has(r);
@@ -332,12 +334,13 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
           <td
             colSpan={dataCols.length}
             style={{
-              background: '#F1F5F9', color: '#64748B', fontStyle: 'italic',
-              fontSize: 11, textAlign: 'center', padding: '5px 8px',
-              border: '2px solid #CBD5E1', fontWeight: 700, letterSpacing: 4,
+              background: 'linear-gradient(90deg,#F8FAFC 0%,#E2E8F0 50%,#F8FAFC 100%)',
+              color: '#64748B', fontSize: 10, textAlign: 'center',
+              padding: '6px 8px', fontWeight: 600, letterSpacing: 6,
+              borderTop: 'none', borderBottom: 'none',
             }}
           >
-            {wCell?.vendor_name || '통     로'}
+            ─ ─ ─ {wCell?.vendor_name || '통로'} ─ ─ ─
           </td>
         </tr>
       );
@@ -345,7 +348,6 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
     }
 
     const pairId = rowPairId[r];
-    // 이 행이 pair의 첫 번째인지 마지막인지 판별
     const rowsInPair = dataRows.filter((x) => !walkwaySet.has(x) && rowPairId[x] === pairId);
     const isFirst = rowsInPair[0] === r;
     const isLast = rowsInPair[rowsInPair.length - 1] === r;
@@ -357,33 +359,41 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
       const display = cell ? (cell.vendor_name || cell.stall_number || cell.section_name || '') : '';
       const isVendor = cell?.cell_type === 'vendor';
       const isStall = cell?.cell_type === 'stall';
-      const isLabelCell = cell?.cell_type === 'label' || cell?.cell_type === 'section_header';
 
       let bg = '#FFFFFF';
-      let color = '#374151';
+      let color = '#475569';
       let fw = 600;
-      if (isVendor) { bg = '#EFF6FF'; color = '#1E40AF'; fw = 700; }
-      if (isStall) { bg = '#F0FDF4'; color = '#166534'; fw = 700; }
-      if (isLabelCell) { bg = SECTION_BG; color = SECTION_TEXT; fw = 700; }
+      let fs = 11;
+      if (isVendor) { bg = '#FFFFFF'; color = '#0F172A'; fw = 700; fs = 11; }
+      if (isStall) { bg = '#FAFAFA'; color = '#0F766E'; fw = 800; fs = 13; }
       if (isH) { bg = '#FEF3C7'; }
 
-      const borderStyle = {
-        borderLeft: `2px solid ${GROUP_BORDER}`,
-        borderRight: `2px solid ${GROUP_BORDER}`,
-        ...(isFirst ? { borderTop: `2px solid ${GROUP_BORDER}` } : { borderTop: '1px dashed #CBD5E1' }),
-        ...(isLast ? { borderBottom: `2px solid ${GROUP_BORDER}` } : {}),
+      // 카드 박스 스타일: pair의 첫 행은 top border, 마지막 행은 bottom border
+      const cardStyle = {
+        borderLeft: `1.5px solid ${CARD_BORDER}`,
+        borderRight: `1.5px solid ${CARD_BORDER}`,
+        ...(isFirst ? { borderTop: `1.5px solid ${CARD_BORDER}` } : { borderTop: '1px solid #F1F5F9' }),
+        ...(isLast ? {
+          borderBottom: `1.5px solid ${CARD_BORDER}`,
+          boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
+        } : {}),
       };
+
+      const isEmpty = !cell;
 
       cols.push(
         <td
           key={c}
           style={{
-            width: 80, minWidth: 80, height: 28,
-            background: bg, color, fontWeight: fw,
-            fontSize: 11, textAlign: 'center', verticalAlign: 'middle',
-            padding: '2px 4px', boxSizing: 'border-box',
-            cursor: 'pointer',
-            ...(isH ? { outline: '2px solid #F59E0B' } : borderStyle),
+            width: STALL_W, minWidth: STALL_W, height: isStall ? 30 : 28,
+            background: isEmpty ? '#F8FAFC' : bg,
+            color: isEmpty ? '#CBD5E1' : color,
+            fontWeight: fw, fontSize: fs,
+            textAlign: 'center', verticalAlign: 'middle',
+            padding: '2px 6px', boxSizing: 'border-box',
+            cursor: 'pointer', transition: 'background 0.12s',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            ...(isH ? { outline: '2px solid #F59E0B', outlineOffset: '-2px' } : cardStyle),
           }}
           title={display}
           onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: r, col_idx: c })}
@@ -403,39 +413,94 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
 }
 
 function GenericGrid({ stalls, highlightIds, onCellClick, onEmptyClick, minCellW = 56, scrollRef }) {
-  const { grid, maxRow, maxCol } = buildGrid(stalls);
-  const rows = [];
-  for (let r = 0; r <= maxRow; r++) {
+  const { grid } = buildGrid(stalls);
+
+  // 데이터가 있는 행/열만 추출 (빈 row/col 제거)
+  const dataCols = useMemo(() => {
+    const cols = new Set();
+    for (const s of stalls) cols.add(s.col_idx);
+    return Array.from(cols).sort((a, b) => a - b);
+  }, [stalls]);
+
+  const dataRows = useMemo(() => {
+    const rows = new Set();
+    for (const s of stalls) rows.add(s.row_idx);
+    return Array.from(rows).sort((a, b) => a - b);
+  }, [stalls]);
+
+  // 섹션 헤더가 있는 행 → 다음 데이터까지 한 섹션
+  const headerRows = useMemo(() => {
+    const s = new Set();
+    for (const st of stalls) {
+      if (st.cell_type === 'section_header' || st.cell_type === 'label') s.add(st.row_idx);
+    }
+    return s;
+  }, [stalls]);
+
+  // 화훼단지의 col별 섹션 색상 팔레트
+  const COL_PALETTE = [
+    { bg: '#FCE7F3', border: '#F9A8D4', text: '#9D174D', soft: '#FDF2F8' },  // 핑크
+    { bg: '#DBEAFE', border: '#93C5FD', text: '#1E40AF', soft: '#EFF6FF' },  // 블루
+    { bg: '#D1FAE5', border: '#6EE7B7', text: '#065F46', soft: '#ECFDF5' },  // 그린
+    { bg: '#FED7AA', border: '#FDBA74', text: '#9A3412', soft: '#FFF7ED' },  // 오렌지
+    { bg: '#E0E7FF', border: '#A5B4FC', text: '#3730A3', soft: '#EEF2FF' },  // 인디고
+    { bg: '#FEF3C7', border: '#FCD34D', text: '#92400E', soft: '#FFFBEB' },  // 노랑
+  ];
+  const colPalette = (c) => COL_PALETTE[dataCols.indexOf(c) % COL_PALETTE.length];
+
+  const tableRows = [];
+  for (const r of dataRows) {
+    const isHeaderRow = headerRows.has(r);
     const cols = [];
-    for (let c = 0; c <= maxCol; c++) {
+
+    for (const c of dataCols) {
       const cell = grid[`${r},${c}`];
       const isH = cell && highlightIds.has(cell.id);
       const display = cell ? (cell.vendor_name || cell.stall_number || cell.section_name || '') : '';
-      const isStall = cell?.cell_type === 'stall' || cell?.cell_type === 'vendor';
       const isHeader = cell?.cell_type === 'section_header' || cell?.cell_type === 'label';
       const isFacility = cell?.cell_type === 'facility';
       const isWalkway = cell?.cell_type === 'walkway';
 
-      let bg = '#FFFFFF';
-      let color = '#111827';
+      const pal = colPalette(c);
+      let bg = pal.soft;
+      let color = '#0F172A';
       let fontWeight = 600;
-      if (isHeader) { bg = SECTION_BG; color = SECTION_TEXT; fontWeight = 700; }
-      if (isFacility) { bg = '#FEF2F2'; color = '#DC2626'; }
-      if (isWalkway) { bg = '#F1F5F9'; color = '#64748B'; }
-      if (isH) { bg = '#FEF3C7'; }
+      let borderStyle = `1px solid ${pal.border}55`;
+
+      if (isHeader) {
+        bg = pal.bg;
+        color = pal.text;
+        fontWeight = 800;
+        borderStyle = `1.5px solid ${pal.border}`;
+      } else if (isFacility) {
+        bg = '#FEE2E2'; color = '#991B1B'; fontWeight = 700;
+        borderStyle = '1.5px solid #FCA5A5';
+      } else if (isWalkway) {
+        bg = '#F1F5F9'; color = '#64748B';
+        borderStyle = '1px dashed #CBD5E1';
+      } else if (!cell) {
+        bg = '#FAFAFA';
+        color = '#CBD5E1';
+        borderStyle = '1px dashed #E2E8F0';
+      }
+      if (isH) { bg = '#FEF3C7'; borderStyle = '2px solid #F59E0B'; }
 
       cols.push(
         <td
           key={c}
           style={{
-            width: minCellW, minWidth: minCellW, maxWidth: minCellW, height: 32,
+            width: minCellW, minWidth: minCellW, maxWidth: minCellW,
+            height: isHeader ? 36 : 30,
             background: bg, color, fontWeight,
-            fontSize: 11, fontStyle: isWalkway ? 'italic' : 'normal',
+            fontSize: isHeader ? 12 : 11,
+            fontStyle: isWalkway ? 'italic' : 'normal',
             textAlign: 'center', verticalAlign: 'middle',
-            padding: '2px 4px', boxSizing: 'border-box',
-            whiteSpace: 'pre-wrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            padding: '4px 6px', boxSizing: 'border-box',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             cursor: 'pointer',
-            border: isH ? '2px solid #F59E0B' : '1px solid #E2E8F0',
+            border: borderStyle,
+            borderRadius: isHeader ? 6 : 0,
+            transition: 'background 0.12s',
           }}
           title={display}
           onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: r, col_idx: c, section_name: null, company_name: null })}
@@ -444,11 +509,22 @@ function GenericGrid({ stalls, highlightIds, onCellClick, onEmptyClick, minCellW
         </td>
       );
     }
-    rows.push(<tr key={r}>{cols}</tr>);
+    tableRows.push(
+      <tr key={r}>{cols}</tr>
+    );
+    // 헤더 행 다음에 4px 간격 추가
+    if (isHeaderRow) {
+      tableRows.push(
+        <tr key={`${r}-gap`}>
+          <td colSpan={dataCols.length} style={{ height: 4, padding: 0, border: 'none' }} />
+        </tr>
+      );
+    }
   }
+
   return (
-    <table ref={scrollRef} style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
-      <tbody>{rows}</tbody>
+    <table ref={scrollRef} style={{ borderCollapse: 'separate', borderSpacing: '3px 1px', tableLayout: 'fixed', fontSize: 11 }}>
+      <tbody>{tableRows}</tbody>
     </table>
   );
 }
