@@ -78,7 +78,7 @@ function makeColMap(ranges, key = 'name') {
   return map;
 }
 
-const CELL_W = 36;
+const CELL_W = 42;
 const CELL_H = 24;
 
 function CheonggwamulGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
