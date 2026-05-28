@@ -1408,14 +1408,14 @@ export default function App() {
     },
     modal: {
       width: '100%', maxWidth: '360px', borderRadius: '20px',
-      backgroundColor: 'var(--bg-primary)', padding: '24px 20px',
+      backgroundColor: '#FFFFFF', padding: '24px 20px',
       boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
       display: 'flex', flexDirection: 'column', gap: '12px',
     },
     modalHeader: { display: 'flex', alignItems: 'center', gap: '8px' },
     modalHeaderText: { fontSize: '13px', fontWeight: 700, color: '#F59E0B' },
     modalTitle: { fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 },
-    modalContent: { fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 },
+    modalContent: { fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-line' },
     modalFooter: { display: 'flex', gap: '8px', marginTop: '4px' },
     dismissBtn: {
       flex: 1, minHeight: '42px', borderRadius: '12px', border: '1px solid var(--border)',
