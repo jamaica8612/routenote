@@ -146,25 +146,24 @@ export default function SearchBox({ onSelectResult, onRoadGeometry, zones, tips 
 
           if (roadName) {
             try {
-              const roadResponse = await fetch(
-                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-road-geometry?name=${encodeURIComponent(roadName)}`,
-                {
-                  method: 'GET',
-                  headers: {
-                    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                    authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                  },
-                }
-              );
+              const overpassQuery = `[out:json][timeout:30][bbox:33,124,38.6,132];way["name"="${roadName}"]["highway"];out geom;`;
+              const roadResponse = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: `data=${encodeURIComponent(overpassQuery)}`,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              });
               const roadData = await roadResponse.json();
-              if (roadData?.ways?.length) {
-                onRoadGeometry?.(roadData.ways);
+              const ways = (roadData.elements ?? [])
+                .filter((el) => el.type === 'way' && Array.isArray(el.geometry))
+                .map((el) => el.geometry.map((pt) => ({ lat: pt.lat, lng: pt.lon })));
+              if (ways.length) {
+                onRoadGeometry?.(ways);
                 nextResults.push({
                   type: 'road',
                   id: `road-${roadName}`,
                   title: roadName,
                   subtitle: '도로 전체 경로 지도에 표시',
-                  data: { ways: roadData.ways },
+                  data: { ways },
                 });
               } else {
                 onRoadGeometry?.(null);
