@@ -425,6 +425,210 @@ function MubaechuGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollR
   );
 }
 
+function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scrollRef }) {
+  const get = useCallback((r, c) => stalls.find((s) => s.row_idx === r && s.col_idx === c), [stalls]);
+  const OUTER = '#1C3B4A';
+
+  // 절대 위치 기반 평면도
+  // 캔버스 크기
+  const W = 1100;
+  const H = 600;
+
+  // 위치/크기 상수
+  const TOP_STALL_W = 64;
+  const TOP_STALL_H = 70;
+  const TOP_LEFT_X = 290; // 상단 점포 시작 X (육일상회 12호의 왼쪽)
+  const TOP_Y = 90;
+
+  const RIGHT_FAC_W = TOP_STALL_W;
+  const RIGHT_FAC_H = 28; // 시설 한 칸 높이
+  const RIGHT_FAC_X = TOP_LEFT_X;
+  const RIGHT_FAC_Y = TOP_Y + TOP_STALL_H; // 12호 점포 바로 아래
+
+  const HARYEOK_X = W - 80;
+  const HARYEOK_Y = TOP_Y + 100;
+
+  const MID_Y = 320;
+  const MID_STALL_W = 70;
+  const MID_STALL_H = 70;
+  const MID_LEFT_X = 10;
+  const HWAJANG_W = 36;
+
+  const BOT_Y = 460;
+  const BOT_H = 80;
+  const BOT_LEFT_X = 10;
+  const BOT_W = W - 20;
+
+  // 셀 렌더 헬퍼
+  const stallBox = (cell, x, y, w, h, opts = {}) => {
+    const isH = cell && highlightIds.has(cell.id);
+    return (
+      <div
+        key={opts.key}
+        onClick={() => cell ? onCellClick(cell) : onEmptyClick({ row_idx: opts.r, col_idx: opts.c })}
+        style={{
+          position: 'absolute', left: x, top: y, width: w, height: h,
+          border: `1.5px solid ${OUTER}`,
+          background: isH ? '#FEF3C7' : (cell ? '#FFFFFF' : '#FAFAFA'),
+          color: cell ? '#0F172A' : '#CBD5E1',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          fontSize: opts.small ? 10 : 12,
+          fontWeight: 700,
+          textAlign: 'center',
+          lineHeight: 1.2,
+          padding: '3px 2px',
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          whiteSpace: 'normal',
+          overflow: 'hidden',
+          ...(isH && { outline: '2px solid #F59E0B' }),
+        }}
+        title={cell?.vendor_name || ''}
+      >
+        {cell ? (
+          <>
+            <div>{cell.vendor_name}</div>
+            {cell.stall_number && (
+              <div style={{ fontSize: opts.small ? 9 : 10.5, fontWeight: 500, marginTop: 2 }}>
+                ({cell.stall_number}호)
+              </div>
+            )}
+          </>
+        ) : '—'}
+      </div>
+    );
+  };
+
+  const facilityBox = (cell, label, x, y, w, h, opts = {}) => {
+    const isH = cell && highlightIds.has(cell.id);
+    return (
+      <div
+        key={opts.key}
+        onClick={() => cell && onCellClick(cell)}
+        style={{
+          position: 'absolute', left: x, top: y, width: w, height: h,
+          border: `1.5px solid ${OUTER}`,
+          background: isH ? '#FEF3C7' : '#FFFFFF',
+          color: '#1C3B4A',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, fontWeight: 700,
+          textAlign: 'center', lineHeight: 1.25,
+          boxSizing: 'border-box', cursor: cell ? 'pointer' : 'default',
+          ...opts.style,
+        }}
+      >
+        {cell?.vendor_name || label}
+      </div>
+    );
+  };
+
+  const labelText = (cell, text, x, y, w, h) => (
+    <div
+      style={{
+        position: 'absolute', left: x, top: y, width: w, height: h,
+        color: '#1C3B4A', fontSize: 13, fontWeight: 700,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center', boxSizing: 'border-box',
+      }}
+    >
+      {cell?.vendor_name || text}
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '8px 12px 16px' }}>
+      {/* 양념동 점포찾기 타이틀 */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+        <div style={{
+          border: `1.5px solid ${OUTER}`, padding: '8px 36px',
+          fontSize: 18, fontWeight: 800, letterSpacing: 4, color: OUTER,
+        }}>
+          양념동 점포찾기
+        </div>
+      </div>
+
+      {/* 평면도 캔버스 */}
+      <div ref={scrollRef} style={{ position: 'relative', width: W, height: H, background: '#FFFFFF' }}>
+
+        {/* 북문 (좌상단 단독 박스) */}
+        {facilityBox(get(1, 9), '북문', 20, TOP_Y + 8, 70, 34, { key: 'bukmun' })}
+
+        {/* 공동작업장 (좌상단 단독 박스, 큼) */}
+        {facilityBox(get(1, 10), '공동작업장', 130, TOP_Y, 110, 60, { key: 'gongdong' })}
+
+        {/* 상단 점포 12호 → 1호 (우측 일렬) */}
+        {/* col 0-7: 8개 단일 점포 */}
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((c, i) => (
+          stallBox(get(0, c), TOP_LEFT_X + i * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: `t-${c}`, r: 0, c })
+        ))}
+        {/* col 8: 경북농산 (3~4호) - 2칸 너비 */}
+        {stallBox(get(0, 8), TOP_LEFT_X + 8 * TOP_STALL_W, TOP_Y, TOP_STALL_W * 2, TOP_STALL_H, { key: 't-8', r: 0, c: 8 })}
+        {/* col 10: 마늘나라 (2호) */}
+        {stallBox(get(0, 10), TOP_LEFT_X + 10 * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: 't-10', r: 0, c: 10 })}
+        {/* col 11: 생강마을 (1호) */}
+        {stallBox(get(0, 11), TOP_LEFT_X + 11 * TOP_STALL_W, TOP_Y, TOP_STALL_W, TOP_STALL_H, { key: 't-11', r: 0, c: 11 })}
+
+        {/* 좌측 시설 (12호 점포 바로 아래) */}
+        {/* 출입구 라벨 */}
+        {labelText(get(1, 0), '출입구', RIGHT_FAC_X - 65, RIGHT_FAC_Y, 60, RIGHT_FAC_H)}
+        {/* 기계실 박스 */}
+        {facilityBox(get(2, 0), '기계실', RIGHT_FAC_X, RIGHT_FAC_Y, RIGHT_FAC_W, 50, { key: 'gigye' })}
+        {/* 경비실 박스 */}
+        {facilityBox(get(3, 0), '경비실', RIGHT_FAC_X, RIGHT_FAC_Y + 50, RIGHT_FAC_W, 50, { key: 'gyungbi' })}
+        {/* 차량출입구 (좌측 라벨, 경비실 아래) */}
+        {labelText(get(4, 0), '차량출입구', RIGHT_FAC_X - 10, RIGHT_FAC_Y + 105, 90, 28)}
+
+        {/* 하역반 (우측 단독 박스) */}
+        {facilityBox(get(2, 11), '하역반', HARYEOK_X, HARYEOK_Y, 70, 60, { key: 'haryeok' })}
+
+        {/* 중간 점포 20호 → 13호 (좌측 일렬) */}
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((c, i) => (
+          stallBox(get(5, c), MID_LEFT_X + i * MID_STALL_W, MID_Y, MID_STALL_W, MID_STALL_H, { key: `m-${c}`, r: 5, c })
+        ))}
+
+        {/* 화장실 (예천농산 13호 옆, 세로 글자) */}
+        <div
+          onClick={() => { const c = get(5, 8); c && onCellClick(c); }}
+          style={{
+            position: 'absolute',
+            left: MID_LEFT_X + 8 * MID_STALL_W, top: MID_Y,
+            width: HWAJANG_W, height: MID_STALL_H,
+            border: `1.5px solid ${OUTER}`, background: '#FFFFFF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', boxSizing: 'border-box',
+          }}
+        >
+          <div style={{
+            writingMode: 'vertical-rl', textOrientation: 'upright',
+            fontSize: 13, fontWeight: 700, color: OUTER, letterSpacing: 2,
+          }}>
+            화장실
+          </div>
+        </div>
+
+        {/* 차량출입구 (우측 라벨, 중간 행 우측) */}
+        {labelText(get(5, 10), '차량출입구', HARYEOK_X - 30, MID_Y + 20, 120, 28)}
+
+        {/* 출입구 (좌측 하단 라벨) */}
+        {labelText(get(6, 0), '출입구', BOT_LEFT_X, BOT_Y - 30, 60, 26)}
+
+        {/* 상장 지도원실 (우측 단독 박스) */}
+        {facilityBox(get(6, 11), '상장\n지도원실', HARYEOK_X, BOT_Y - 30, 70, 56,
+          { key: 'sangjang', style: { fontSize: 11, whiteSpace: 'pre-line' } })}
+
+        {/* 하단 점포 21호 → 40호 (가로 전체) */}
+        {Array.from({ length: 20 }).map((_, i) => {
+          const cellW = BOT_W / 20;
+          return stallBox(get(7, i), BOT_LEFT_X + i * cellW, BOT_Y, cellW, BOT_H, {
+            key: `b-${i}`, r: 7, c: i, small: true,
+          });
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GenericGrid({ stalls, highlightIds, onCellClick, onEmptyClick, minCellW = 56, scrollRef }) {
   const { grid } = buildGrid(stalls);
 
@@ -909,6 +1113,14 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
                 />
               ) : activeBuilding === 'mubaechu' ? (
                 <MubaechuGrid
+                  stalls={stalls}
+                  highlightIds={highlightIds}
+                  onCellClick={handleCellClick}
+                  onEmptyClick={handleEmptyClick}
+                  scrollRef={tableRef}
+                />
+              ) : activeBuilding === 'yangnyeom' ? (
+                <YangnyeomGrid
                   stalls={stalls}
                   highlightIds={highlightIds}
                   onCellClick={handleCellClick}
