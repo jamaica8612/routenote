@@ -66,11 +66,23 @@ export default function App() {
   const [expandedAnnId, setExpandedAnnId] = useState(null);
 
   // 시장지도 상태
-  const [marketModalOpen, setMarketModalOpen] = useState(true);
+  const [marketModalOpen, setMarketModalOpen] = useState(false);
   const [marketBuilding, setMarketBuilding] = useState('cheonggwamul');
+  const [marketBuildings, setMarketBuildings] = useState([]);
+  const [editPins, setEditPins] = useState(false);
   const [annComments, setAnnComments] = useState({});
   const [annCommentInput, setAnnCommentInput] = useState('');
   const [annCommentSaving, setAnnCommentSaving] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('rn_market_buildings')
+      .select('code, name, sort_order, pos_lat, pos_lng, icon')
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data) setMarketBuildings(data);
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1575,18 +1587,6 @@ export default function App() {
     },
   };
 
-  // 임시 미리보기: 인증 단계를 건너뛰고 모달만 표시
-  if (true) {
-    return (
-      <MarketMapModal
-        isOpen={marketModalOpen}
-        onClose={() => setMarketModalOpen(false)}
-        initialBuilding={marketBuilding}
-        currentUser={{ id: 'preview-user', name: '미리보기 사용자' }}
-      />
-    );
-  }
-
   if (authLoading) {
     return (
       <div style={styles.loaderContainer}>
@@ -1606,16 +1606,7 @@ export default function App() {
   }
 
   if (!currentUser) {
-    // 임시 미리보기: 로그인 없이 MarketMapModal만 표시
-    return (
-      <MarketMapModal
-        isOpen={marketModalOpen}
-        onClose={() => setMarketModalOpen(false)}
-        initialBuilding={marketBuilding}
-        currentUser={{ id: 'preview-user', name: '미리보기 사용자' }}
-      />
-    );
-    // return <AuthScreen onDemoLogin={handleDemoLogin} />;
+    return <AuthScreen onDemoLogin={handleDemoLogin} />;
   }
 
   const visibleZoneIds = new Set([
@@ -1685,6 +1676,22 @@ export default function App() {
         onLocationUpdate={handleLocationUpdate}
         teamMembers={teamMembers}
         isSharingLocation={isSharingLocation}
+        buildings={marketBuildings}
+        onBuildingClick={(code) => {
+          setMarketBuilding(code);
+          setMarketModalOpen(true);
+        }}
+        isAdmin={currentUser?.role === 'admin'}
+        editPins={editPins}
+        onPinPositionChange={async (code, lat, lng) => {
+          await supabase
+            .from('rn_market_buildings')
+            .update({ pos_lat: lat, pos_lng: lng })
+            .eq('code', code);
+          setMarketBuildings(prev =>
+            prev.map(b => b.code === code ? { ...b, pos_lat: lat, pos_lng: lng } : b)
+          );
+        }}
         onCreateZone={() => {
           setSelectedZone(null);
           setDrawCoords([]);
@@ -1704,6 +1711,18 @@ export default function App() {
           setSheetOpen(true);
         }}
       />
+
+      {!isDrawingZone && !isDrawingPath && selectedZone?.name === '311CD322D' && currentUser?.role === 'admin' && (
+        <button
+          className="btn btn-icon map-action-btn"
+          onClick={() => setEditPins(v => !v)}
+          aria-label={editPins ? '핀 편집 종료' : '핀 위치 편집'}
+          title={editPins ? '핀 편집 종료' : '핀 위치 편집'}
+          style={{ ...styles.headerLogoutBtn, right: '52px', background: editPins ? 'rgba(37,99,235,0.12)' : undefined }}
+        >
+          {editPins ? '✅' : '📌'}
+        </button>
+      )}
 
       {!isDrawingZone && !isDrawingPath && (
         <button

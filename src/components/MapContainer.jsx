@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRightLeft, Check, Layers, Locate, Map as MapIcon, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { getPolygonCentroid } from '../utils/geoUtils';
+import MarketBuildingPins from './MarketBuildingPins';
 
 const MARKER_TYPES = {
   vehicle_entrance: { emoji: '🚗', label: '차량 진입구' },
@@ -82,6 +83,11 @@ export default function MapContainer({
   onLocationUpdate,
   teamMembers = {},
   isSharingLocation = false,
+  buildings = [],
+  onBuildingClick,
+  isAdmin = false,
+  editPins = false,
+  onPinPositionChange,
 }) {
   const mapRef = useRef(null);
   const [mapInstance, setMapInstance] = useState(null);
@@ -883,6 +889,16 @@ export default function MapContainer({
         </div>
       )}
       <div ref={mapRef} style={styles.map} />
+
+      {selectedZone?.name === '311CD322D' && buildings.length > 0 && (
+        <MarketBuildingPins
+          map={mapInstance}
+          buildings={buildings}
+          onPinClick={onBuildingClick}
+          editable={editPins}
+          onPositionChange={onPinPositionChange}
+        />
+      )}
 
       {!isDrawingZone && !isDrawingPath && (
         <button
