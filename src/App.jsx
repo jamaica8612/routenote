@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import BottomSheet from './components/BottomSheet';
 import MapContainer from './components/MapContainer';
+import MarketMapModal from './components/MarketMapModal';
 import PathForm from './components/PathForm';
 import RoadviewModal from './components/RoadviewModal';
 import SearchBox from './components/SearchBox';
@@ -63,9 +64,25 @@ export default function App() {
   const [announcementForm, setAnnouncementForm] = useState({ open: false, title: '', content: '' });
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [expandedAnnId, setExpandedAnnId] = useState(null);
+
+  // 시장지도 상태
+  const [marketModalOpen, setMarketModalOpen] = useState(false);
+  const [marketBuilding, setMarketBuilding] = useState('cheonggwamul');
+  const [marketBuildings, setMarketBuildings] = useState([]);
+  const [editPins, setEditPins] = useState(false);
   const [annComments, setAnnComments] = useState({});
   const [annCommentInput, setAnnCommentInput] = useState('');
   const [annCommentSaving, setAnnCommentSaving] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('rn_market_buildings')
+      .select('code, name, sort_order, pos_lat, pos_lng, icon')
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => {
+        if (data) setMarketBuildings(data);
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -828,7 +845,18 @@ export default function App() {
         );
       case 'zone-detail':
         return (
-          <ZoneDetail
+          <>
+            {selectedZone?.name === '311CD322D' && currentUser?.role === 'admin' && (
+              <button
+                type="button"
+                className={`btn ${editPins ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ width: '100%', marginBottom: '12px' }}
+                onClick={() => setEditPins(v => !v)}
+              >
+                {editPins ? '✅ 핀 편집 종료 (드래그하여 위치 조정)' : '📌 핀 위치 편집'}
+              </button>
+            )}
+            <ZoneDetail
             zone={selectedZone}
             currentUser={currentUser}
             tips={tips}
@@ -869,6 +897,7 @@ export default function App() {
             activePathId={activePathId}
             onUpdate={fetchData}
           />
+          </>
         );
       case 'map-click-menu': {
         const matchedZone = zones.find(zone => !zone.is_deleted && isPointInPolygon(clickLat, clickLng, zone.polygon));
@@ -1659,6 +1688,22 @@ export default function App() {
         onLocationUpdate={handleLocationUpdate}
         teamMembers={teamMembers}
         isSharingLocation={isSharingLocation}
+        buildings={marketBuildings}
+        onBuildingClick={(code) => {
+          setMarketBuilding(code);
+          setMarketModalOpen(true);
+        }}
+        isAdmin={currentUser?.role === 'admin'}
+        editPins={editPins}
+        onPinPositionChange={async (code, lat, lng) => {
+          await supabase
+            .from('rn_market_buildings')
+            .update({ pos_lat: lat, pos_lng: lng })
+            .eq('code', code);
+          setMarketBuildings(prev =>
+            prev.map(b => b.code === code ? { ...b, pos_lat: lat, pos_lng: lng } : b)
+          );
+        }}
         onCreateZone={() => {
           setSelectedZone(null);
           setDrawCoords([]);
@@ -1678,6 +1723,7 @@ export default function App() {
           setSheetOpen(true);
         }}
       />
+
 
       {!isDrawingZone && !isDrawingPath && (
         <button
@@ -1705,6 +1751,7 @@ export default function App() {
           )}
         </button>
       )}
+
 
       {!isDrawingZone && !isDrawingPath && currentUser?.role !== 'viewer' && !isDemoUser(currentUser) && (
         <button
@@ -1746,6 +1793,13 @@ export default function App() {
           onClose={() => setActiveRoadviewCoords(null)}
         />
       )}
+
+      <MarketMapModal
+        isOpen={marketModalOpen}
+        onClose={() => setMarketModalOpen(false)}
+        initialBuilding={marketBuilding}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
@@ -1800,6 +1854,24 @@ const styles = {
     padding: '0 4px',
     border: '2px solid #FFFFFF',
     boxShadow: '0 6px 14px rgba(239, 68, 68, 0.32)',
+  },
+  marketBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '136px',
+    width: '46px',
+    height: '46px',
+    borderRadius: '14px',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 900,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(148, 163, 184, 0.22)',
+    cursor: 'pointer',
   },
   headerLogoutBtn: {
     position: 'absolute',

@@ -114,6 +114,39 @@ jobs:
             sys.exit(1)
           PYEOF
 
+      - name: Apply market map tables
+        run: |
+          python3 << 'PYEOF'
+          import json, urllib.request, os, sys
+
+          token = os.environ["SUPABASE_ACCESS_TOKEN"]
+          ref = "dewusorjwzhsdhrsrvbg"
+
+          with open("supabase/migrations/20260528_market_map.sql") as f:
+            schema_sql = f.read()
+
+          with open("supabase/seeds/market_seed.sql") as f:
+            seed_sql = f.read()
+
+          def run_sql(sql, label):
+            url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
+            data = json.dumps({"query": sql}).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers={
+              "Authorization": f"Bearer {token}",
+              "Content-Type": "application/json",
+            })
+            try:
+              with urllib.request.urlopen(req) as resp:
+                print(f"{label} OK:", resp.read().decode())
+            except urllib.error.HTTPError as e:
+              body = e.read().decode()
+              print(f"{label} HTTP {e.code}: {body}", file=sys.stderr)
+              sys.exit(1)
+
+          run_sql(schema_sql, "Market schema")
+          run_sql(seed_sql, "Market seed")
+          PYEOF
+
       - name: Deploy edge functions
         run: |
           supabase functions deploy rn-postcode-zone --project-ref dewusorjwzhsdhrsrvbg
@@ -131,15 +164,15 @@ jobs:
 
           sql = (
             "INSERT INTO public.rn_announcements (title, content, created_by, is_active) "
-            "SELECT '2026.05.27 업데이트', "
-            "'• 주소/도로명 검색 시 지도에 핀 및 도로 표시\n"
-            "• 공지사항 기능 추가 (댓글, 다시 보지 않기)\n"
-            "• 팀원 접속끊김 텍스트 표시\n"
-            "• 푸시 알림 정상화', "
+            "SELECT '2026.05.28 업데이트', "
+            "'• 반여농산물시장 지도 추가 (청과물동/무배추동/양념동/화훼단지)\n"
+            "• 호수·상호명 검색 및 강조 표시\n"
+            "• 셀 클릭으로 상호명/호수 수정\n"
+            "• 수정이력 확인 가능', "
             "p.id, true "
             "FROM public.rn_profiles p "
             "WHERE p.role = 'admin' "
-            "AND NOT EXISTS (SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.27 업데이트') "
+            "AND NOT EXISTS (SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.28 업데이트') "
             "LIMIT 1;"
           )
 
