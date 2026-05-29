@@ -104,6 +104,7 @@ jobs:
           req = urllib.request.Request(url, data=data, headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
           })
           try:
             with urllib.request.urlopen(req) as resp:
@@ -134,6 +135,7 @@ jobs:
             req = urllib.request.Request(url, data=data, headers={
               "Authorization": f"Bearer {token}",
               "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
             })
             try:
               with urllib.request.urlopen(req) as resp:
@@ -181,6 +183,7 @@ jobs:
           req = urllib.request.Request(url, data=data, headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
           })
           try:
             with urllib.request.urlopen(req) as resp:
