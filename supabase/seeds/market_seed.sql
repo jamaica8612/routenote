@@ -5,7 +5,7 @@
 -- 청과물동 (cheonggwamul)
 INSERT INTO public.rn_market_stalls
   (building_id, row_idx, col_idx, stall_number, vendor_name, section_name, company_name, cell_type, notes, borders)
-SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd
+SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd::jsonb
 FROM (VALUES
   ('cheonggwamul',1,0,NULL,'동부청과',NULL,'동부청과','company_header',NULL,NULL),
   ('cheonggwamul',1,19,NULL,'부산중앙청과',NULL,'부산중앙청과','company_header',NULL,NULL),
@@ -792,7 +792,7 @@ ON CONFLICT (building_id, row_idx, col_idx) DO NOTHING;
 -- 무배추동 (mubaechu)
 INSERT INTO public.rn_market_stalls
   (building_id, row_idx, col_idx, stall_number, vendor_name, section_name, company_name, cell_type, notes, borders)
-SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd
+SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd::jsonb
 FROM (VALUES
   ('mubaechu',1,1,NULL,'무배추동',NULL,NULL,'label',NULL,NULL),
   ('mubaechu',3,1,NULL,'일성상회',NULL,NULL,'vendor',NULL,NULL),
@@ -877,7 +877,7 @@ ON CONFLICT (building_id, row_idx, col_idx) DO NOTHING;
 -- 양념동 (yangnyeom)
 INSERT INTO public.rn_market_stalls
   (building_id, row_idx, col_idx, stall_number, vendor_name, section_name, company_name, cell_type, notes, borders)
-SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd
+SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd::jsonb
 FROM (VALUES
   ('yangnyeom',0,0,'12','육일상회','상단',NULL,'stall','구득회',NULL),
   ('yangnyeom',0,1,'11','대영농산','상단',NULL,'stall','박정훈',NULL),
@@ -936,7 +936,7 @@ ON CONFLICT (building_id, row_idx, col_idx) DO NOTHING;
 -- 화훼단지 (hwahwe)
 INSERT INTO public.rn_market_stalls
   (building_id, row_idx, col_idx, stall_number, vendor_name, section_name, company_name, cell_type, notes, borders)
-SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd
+SELECT b.id, v.r, v.c, v.sn, v.vn, v.sect, v.co, v.ct, v.nt, v.bd::jsonb
 FROM (VALUES
   ('hwahwe',1,0,NULL,'반송로 524',NULL,NULL,'section_header',NULL,NULL),
   ('hwahwe',1,2,NULL,'반송로 560',NULL,NULL,'section_header',NULL,NULL),
