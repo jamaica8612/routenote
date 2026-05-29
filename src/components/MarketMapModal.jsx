@@ -546,16 +546,6 @@ function YangnyeomGrid({ stalls, highlightIds, onCellClick, onEmptyClick, scroll
 
   return (
     <div style={{ padding: '8px 12px 16px' }}>
-      {/* 양념동 점포찾기 타이틀 */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-        <div style={{
-          border: `1.5px solid ${OUTER}`, padding: '8px 36px',
-          fontSize: 18, fontWeight: 800, letterSpacing: 4, color: OUTER,
-        }}>
-          양념동 점포찾기
-        </div>
-      </div>
-
       {/* 평면도 캔버스 */}
       <div ref={scrollRef} style={{ position: 'relative', width: W, height: H_TOTAL, background: '#FFFFFF' }}>
 

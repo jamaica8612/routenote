@@ -845,7 +845,18 @@ export default function App() {
         );
       case 'zone-detail':
         return (
-          <ZoneDetail
+          <>
+            {selectedZone?.name === '311CD322D' && currentUser?.role === 'admin' && (
+              <button
+                type="button"
+                className={`btn ${editPins ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ width: '100%', marginBottom: '12px' }}
+                onClick={() => setEditPins(v => !v)}
+              >
+                {editPins ? '✅ 핀 편집 종료 (드래그하여 위치 조정)' : '📌 핀 위치 편집'}
+              </button>
+            )}
+            <ZoneDetail
             zone={selectedZone}
             currentUser={currentUser}
             tips={tips}
@@ -886,6 +897,7 @@ export default function App() {
             activePathId={activePathId}
             onUpdate={fetchData}
           />
+          </>
         );
       case 'map-click-menu': {
         const matchedZone = zones.find(zone => !zone.is_deleted && isPointInPolygon(clickLat, clickLng, zone.polygon));
@@ -1712,17 +1724,6 @@ export default function App() {
         }}
       />
 
-      {!isDrawingZone && !isDrawingPath && selectedZone?.name === '311CD322D' && currentUser?.role === 'admin' && (
-        <button
-          className="btn btn-icon map-action-btn"
-          onClick={() => setEditPins(v => !v)}
-          aria-label={editPins ? '핀 편집 종료' : '핀 위치 편집'}
-          title={editPins ? '핀 편집 종료' : '핀 위치 편집'}
-          style={{ ...styles.headerLogoutBtn, right: '52px', background: editPins ? 'rgba(37,99,235,0.12)' : undefined }}
-        >
-          {editPins ? '✅' : '📌'}
-        </button>
-      )}
 
       {!isDrawingZone && !isDrawingPath && (
         <button

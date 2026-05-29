@@ -41,20 +41,20 @@ export default function MarketBuildingPins({ map, buildings, onPinClick, editabl
               <div style="
                 background: #fff;
                 border: 2px solid #e2e8f0;
-                border-radius: 12px;
-                padding: 6px 10px;
+                border-radius: 10px;
+                padding: 4px 8px;
                 display: flex;
                 align-items: center;
-                gap: 5px;
+                gap: 4px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.15);
                 white-space: nowrap;
-                font-size: 13px;
+                font-size: 11px;
                 font-weight: 600;
                 color: #1e293b;
-                min-width: 64px;
+                min-width: 52px;
                 justify-content: center;
               ">
-                <span style="font-size: 18px; line-height: 1;">${icon}</span>
+                <span style="font-size: 14px; line-height: 1;">${icon}</span>
                 <span>${name}</span>
               </div>
               <div style="
@@ -67,7 +67,7 @@ export default function MarketBuildingPins({ map, buildings, onPinClick, editabl
               "></div>
             </div>
           `,
-          anchor: new window.naver.maps.Point(40, 52),
+          anchor: new window.naver.maps.Point(34, 44),
         },
       });
 
