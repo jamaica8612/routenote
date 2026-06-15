@@ -57,23 +57,15 @@ function normalizeZonePayload(raw) {
 }
 
 async function fetchViaSupabase(postcode) {
-  try {
-    const { data, error } = await supabase.functions.invoke('rn-postcode-zone', {
-      method: 'GET',
-      queryParams: { postcode },
-    });
+  const { data, error } = await supabase.functions.invoke('rn-postcode-zone', {
+    body: { postcode },
+  });
 
-    if (error) {
-      throw error;
-    }
-
-    return normalizeZonePayload(data);
-  } catch (err) {
-    if (err.message && err.message.includes('non-2xx')) {
-      throw new Error('우편번호 조회 기능(Edge Function: rn-postcode-zone)이 배포되지 않았거나 호출할 수 없습니다. 배포 가이드를 참조하여 배포해주시기 바랍니다.');
-    }
-    throw err;
+  if (error) {
+    throw new Error(error.message || '우편번호 조회 중 오류가 발생했습니다.');
   }
+
+  return normalizeZonePayload(data);
 }
 
 async function fetchViaViteProxy(postcode) {

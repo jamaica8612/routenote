@@ -46,8 +46,14 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const postcode = url.searchParams.get("postcode")?.trim() || "";
+    let postcode = "";
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      postcode = url.searchParams.get("postcode")?.trim() || "";
+    } else {
+      const body = await req.json().catch(() => ({}));
+      postcode = String(body?.postcode || "").trim();
+    }
 
     if (!/^\d{5}$/.test(postcode)) {
       return new Response(JSON.stringify({ error: "postcode must be a 5-digit string." }), {
