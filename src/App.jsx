@@ -15,10 +15,8 @@ import ZoneForm from './components/ZoneForm';
 import { enablePushNotifications, getPushPermissionState, getPushSupportState, sendPushForNotification } from './utils/pushNotifications';
 import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
-import { clearTemporaryOverlay, loadTemporaryOverlay } from './utils/temporaryOverlayUtils';
 
 export default function App() {
-  const [temporaryOverlay, setTemporaryOverlay] = useState(loadTemporaryOverlay);
   const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1673,11 +1671,6 @@ export default function App() {
         paths={[]}
         selectedResult={selectedResult}
         currentUser={currentUser}
-        temporaryOverlay={temporaryOverlay}
-        onClearTemporaryOverlay={() => {
-          clearTemporaryOverlay();
-          setTemporaryOverlay(null);
-        }}
         onMapClick={handleMapClick}
         onMarkerClick={openTipDetail}
         onZoneClick={handleZoneClick}
