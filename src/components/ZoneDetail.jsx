@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText, Camera, Image, Trash } from 'lucide-react';
+import { isDemoUser } from '../utils/userUtils';
 
 export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId, onUpdate }) {
   const [paths, setPaths] = useState([]);
@@ -14,6 +15,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   const [isMemoExpanded, setIsMemoExpanded] = useState(false);
   const [textareaExpanded, setTextareaExpanded] = useState(false);
   const fileInputRef = useRef(null);
+  const canEditZone = Boolean(currentUser && currentUser.role !== 'viewer' && !isDemoUser(currentUser));
 
   useEffect(() => {
     setCurrentImageUrl(zone.image_url || '');
@@ -405,23 +407,31 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         </div>
       )}
 
-      {/* Action Buttons for Zone */}
-      {currentUser && currentUser.role === 'admin' && (
+      {/* Logged-in members can edit shared zone information. Destructive actions stay admin-only. */}
+      {canEditZone && (
         <div style={styles.zoneActions}>
-          <button className="btn btn-secondary" style={styles.actionBtn} onClick={() => onEdit(zone)}>
-            <Edit3 size={16} /> 수정
-          </button>
           <button
+            type="button"
             className="btn btn-secondary"
-            style={{ ...styles.actionBtn, color: 'var(--danger)' }}
-            onClick={() => {
-              if (confirm('이 구역을 정말 삭제하시겠습니까? (속한 팁은 유지되지만 소속 구역 설정이 풀립니다)')) {
-                onDelete(zone.id);
-              }
-            }}
+            style={styles.actionBtn}
+            onClick={() => onEdit(zone)}
           >
-            <Trash2 size={16} /> 삭제
+            <Edit3 size={16} /> 구역 수정하기
           </button>
+          {currentUser.role === 'admin' && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ ...styles.actionBtn, color: 'var(--danger)' }}
+              onClick={() => {
+                if (confirm('이 구역을 정말 삭제하시겠습니까? (속한 팁은 유지되지만 소속 구역 설정이 풀립니다)')) {
+                  onDelete(zone.id);
+                }
+              }}
+            >
+              <Trash2 size={16} /> 삭제
+            </button>
+          )}
         </div>
       )}
 
