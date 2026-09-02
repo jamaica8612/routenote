@@ -63,6 +63,8 @@ export default function MapContainer({
   paths,
   selectedResult,
   currentUser,
+  temporaryOverlay,
+  onClearTemporaryOverlay,
   onMapClick,
   onMarkerClick,
   onZoneClick,
@@ -112,6 +114,10 @@ export default function MapContainer({
   const shouldFollowRef = useRef(true);
   const teamMemberMarkersRef = useRef({});
   const addressPinMarkerRef = useRef(null);
+  const temporaryAreaCirclesRef = useRef([]);
+  const temporaryAreaMarkersRef = useRef([]);
+  const temporaryAreaInfoWindowRef = useRef(null);
+  const fittedTemporaryOverlayIdRef = useRef(null);
 
   useEffect(() => {
     isDrawingZoneRef.current = isDrawingZone;
@@ -250,6 +256,108 @@ export default function MapContainer({
       addressPinMarkerRef.current = null;
     }
   }, [selectedResult]);
+
+  useEffect(() => {
+    temporaryAreaCirclesRef.current.forEach((circle) => {
+      window.naver?.maps?.Event.clearInstanceListeners(circle);
+      circle.setMap(null);
+    });
+    temporaryAreaMarkersRef.current.forEach((marker) => {
+      window.naver?.maps?.Event.clearInstanceListeners(marker);
+      marker.setMap(null);
+    });
+    temporaryAreaInfoWindowRef.current?.close();
+    temporaryAreaCirclesRef.current = [];
+    temporaryAreaMarkersRef.current = [];
+    temporaryAreaInfoWindowRef.current = null;
+
+    if (!mapInstance || !window.naver?.maps || !temporaryOverlay?.areas?.length) {
+      fittedTemporaryOverlayIdRef.current = null;
+      return;
+    }
+
+    const infoWindow = new window.naver.maps.InfoWindow({
+      borderWidth: 0,
+      backgroundColor: 'transparent',
+      disableAnchor: true,
+      pixelOffset: new window.naver.maps.Point(0, -10),
+    });
+    temporaryAreaInfoWindowRef.current = infoWindow;
+
+    const bounds = new window.naver.maps.LatLngBounds();
+
+    temporaryOverlay.areas.forEach((area, index) => {
+      const position = new window.naver.maps.LatLng(area.lat, area.lng);
+      bounds.extend(position);
+
+      const circle = new window.naver.maps.Circle({
+        map: mapInstance,
+        center: position,
+        radius: area.radiusMeters,
+        fillColor: '#EF4444',
+        fillOpacity: 0.18,
+        strokeColor: '#DC2626',
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        clickable: true,
+      });
+
+      const marker = new window.naver.maps.Marker({
+        map: mapInstance,
+        position,
+        clickable: true,
+        icon: {
+          content: `<div style="min-width:32px;height:32px;padding:0 7px;border-radius:16px;background:#DC2626;color:#fff;border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;white-space:nowrap;transform:translate(-50%,-50%);">${index + 1} · ${area.total}호</div>`,
+          anchor: new window.naver.maps.Point(0, 0),
+        },
+      });
+
+      const openAreaInfo = () => {
+        const content = document.createElement('div');
+        Object.assign(content.style, {
+          width: '248px', padding: '14px', borderRadius: '14px', background: '#FFFFFF',
+          boxShadow: '0 12px 30px rgba(15, 23, 42, 0.22)', color: '#0F172A',
+          fontFamily: 'sans-serif', lineHeight: '1.45',
+        });
+
+        const title = document.createElement('strong');
+        title.textContent = `${index + 1}. ${area.name}`;
+        title.style.fontSize = '15px';
+        const address = document.createElement('div');
+        address.textContent = area.address;
+        Object.assign(address.style, { marginTop: '5px', fontSize: '13px', color: '#475569' });
+        const stats = document.createElement('div');
+        stats.textContent = `면적 ${area.areaSqm.toLocaleString()}㎡ · 총 ${area.total}호`;
+        Object.assign(stats.style, { marginTop: '9px', fontSize: '13px', fontWeight: '700' });
+        const grades = document.createElement('div');
+        grades.textContent = `1등급 ${area.grade1} · 2등급 ${area.grade2} · 3등급 ${area.grade3}`;
+        Object.assign(grades.style, { marginTop: '3px', fontSize: '12px', color: '#475569' });
+        const warning = document.createElement('div');
+        warning.textContent = '공시 면적 환산 예상 범위 · 법정 경계 아님';
+        Object.assign(warning.style, { marginTop: '9px', fontSize: '11px', color: '#B45309' });
+        content.append(title, address, stats, grades, warning);
+
+        infoWindow.setContent(content);
+        infoWindow.open(mapInstance, position);
+      };
+
+      window.naver.maps.Event.addListener(circle, 'click', openAreaInfo);
+      window.naver.maps.Event.addListener(marker, 'click', openAreaInfo);
+      temporaryAreaCirclesRef.current.push(circle);
+      temporaryAreaMarkersRef.current.push(marker);
+    });
+
+    if (fittedTemporaryOverlayIdRef.current !== temporaryOverlay.id) {
+      mapInstance.fitBounds(bounds, { top: 150, right: 40, bottom: 100, left: 40 });
+      fittedTemporaryOverlayIdRef.current = temporaryOverlay.id;
+    }
+
+    return () => {
+      temporaryAreaCirclesRef.current.forEach((circle) => circle.setMap(null));
+      temporaryAreaMarkersRef.current.forEach((marker) => marker.setMap(null));
+      infoWindow.close();
+    };
+  }, [mapInstance, temporaryOverlay]);
 
   useEffect(() => {
     if (!mapInstance || !selectedResult) return;
@@ -890,6 +998,24 @@ export default function MapContainer({
       )}
       <div ref={mapRef} style={styles.map} />
 
+      {temporaryOverlay && !isDrawingZone && !isDrawingPath && (
+        <div className="glass" style={styles.temporaryOverlayBanner}>
+          <div style={styles.temporaryOverlayText}>
+            <strong>{temporaryOverlay.title}</strong>
+            <span>{temporaryOverlay.disclaimer}</span>
+          </div>
+          <button
+            type="button"
+            style={styles.temporaryOverlayClose}
+            onClick={onClearTemporaryOverlay}
+            aria-label="개인 임시 표시 지우기"
+            title="개인 임시 표시 지우기"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {selectedZone?.name === '311CD322D' && buildings.length > 0 && (
         <MarketBuildingPins
           map={mapInstance}
@@ -1038,6 +1164,44 @@ const styles = {
     justifyContent: 'center',
     color: 'var(--text-secondary)',
     fontSize: '14px',
+  },
+  temporaryOverlayBanner: {
+    position: 'absolute',
+    top: '82px',
+    left: '16px',
+    right: '16px',
+    zIndex: 845,
+    minHeight: '54px',
+    padding: '9px 10px 9px 13px',
+    borderRadius: '14px',
+    border: '1px solid rgba(239, 68, 68, 0.28)',
+    boxShadow: 'var(--shadow-md)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+  },
+  temporaryOverlayText: {
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    lineHeight: '1.3',
+  },
+  temporaryOverlayClose: {
+    width: '32px',
+    height: '32px',
+    flexShrink: 0,
+    borderRadius: '10px',
+    border: 'none',
+    background: 'rgba(239, 68, 68, 0.12)',
+    color: '#DC2626',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
   },
   roadviewFloatBtn: (isAdmin) => ({
     position: 'absolute',
