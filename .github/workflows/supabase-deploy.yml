@@ -175,6 +175,26 @@ jobs:
             sys.exit(1)
           PYEOF
 
+      - name: Apply Android field permissions
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          with open("supabase/migrations/20260906035458_android_field_permissions.sql", encoding="utf-8-sig") as f:
+            sql = f.read()
+          with open("supabase/migrations/20260906035705_tip_creator_delete.sql", encoding="utf-8-sig") as f:
+            sql += "\n" + f.read()
+          request = urllib.request.Request(
+            "https://api.supabase.com/v1/projects/dewusorjwzhsdhrsrvbg/database/query",
+            data=json.dumps({"query": sql}).encode("utf-8"),
+            headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
+                     "Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(request, timeout=60) as response:
+            response.read()
+          print("Android field permissions applied")
+          PYEOF
+
       - name: Deploy edge functions
         run: |
           supabase functions deploy rn-postcode-zone --project-ref dewusorjwzhsdhrsrvbg
