@@ -107,6 +107,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Keep zone ownership stable so an editor cannot transfer a zone to themselves
+-- before deleting it.
+CREATE OR REPLACE FUNCTION public.rn_preserve_zone_creator()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+BEGIN
+    NEW.created_by := OLD.created_by;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS rn_route_zones_preserve_creator ON public.rn_route_zones;
+CREATE TRIGGER rn_route_zones_preserve_creator
+    BEFORE UPDATE ON public.rn_route_zones
+    FOR EACH ROW
+    EXECUTE FUNCTION public.rn_preserve_zone_creator();
+
 -- RLS Policies with prefix names
 
 -- Profiles Policies
@@ -120,8 +139,18 @@ CREATE POLICY "rn_write_profiles_for_auth" ON public.rn_profiles
 CREATE POLICY "rn_read_zones_for_all" ON public.rn_route_zones
     FOR SELECT USING (true);
 
-CREATE POLICY "rn_write_zones_for_auth" ON public.rn_route_zones
-    FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "rn_insert_zones_for_auth" ON public.rn_route_zones
+    FOR INSERT TO authenticated
+    WITH CHECK ((SELECT auth.uid()) = created_by);
+
+CREATE POLICY "rn_update_zones_for_auth" ON public.rn_route_zones
+    FOR UPDATE TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "rn_delete_own_zones" ON public.rn_route_zones
+    FOR DELETE TO authenticated
+    USING ((SELECT auth.uid()) = created_by);
 
 -- Route Tips Policies
 CREATE POLICY "rn_read_tips_for_all" ON public.rn_route_tips

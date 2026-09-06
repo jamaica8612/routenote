@@ -149,6 +149,32 @@ jobs:
           run_sql(seed_sql, "Market seed")
           PYEOF
 
+      - name: Apply zone creator permissions
+        run: |
+          python3 << 'PYEOF'
+          import json, urllib.request, os, sys
+
+          token = os.environ["SUPABASE_ACCESS_TOKEN"]
+          ref = "dewusorjwzhsdhrsrvbg"
+          with open("supabase/migrations/20260906120000_zone_creator_permissions.sql", encoding="utf-8") as f:
+            sql = f.read()
+
+          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
+          data = json.dumps({"query": sql}).encode("utf-8")
+          req = urllib.request.Request(url, data=data, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
+          })
+          try:
+            with urllib.request.urlopen(req) as resp:
+              print("Zone creator permissions:", resp.read().decode())
+          except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"Zone creator permissions HTTP {e.code}: {body}", file=sys.stderr)
+            sys.exit(1)
+          PYEOF
+
       - name: Deploy edge functions
         run: |
           supabase functions deploy rn-postcode-zone --project-ref dewusorjwzhsdhrsrvbg

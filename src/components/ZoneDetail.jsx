@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Landmark, Trash2, Edit3, Route, Plus, MapPin, ChevronRight, FileText, Camera, Image, Trash } from 'lucide-react';
-import { isDemoUser } from '../utils/userUtils';
+import { getDbUserId, isDemoUser } from '../utils/userUtils';
 
 export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng, onAddTipAtClick, onEdit, onDelete, onStartDrawPath, onSelectPath, activePathId, onUpdate }) {
   const [paths, setPaths] = useState([]);
@@ -407,7 +407,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         </div>
       )}
 
-      {/* Logged-in members can edit shared zone information. Destructive actions stay admin-only. */}
+      {/* Logged-in members can edit shared zone information. Only the creator can delete a zone. */}
       {canEditZone && (
         <div style={styles.zoneActions}>
           <button
@@ -418,7 +418,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
           >
             <Edit3 size={16} /> 구역 수정하기
           </button>
-          {currentUser.role === 'admin' && (
+          {getDbUserId(currentUser) === zone.created_by && (
             <button
               type="button"
               className="btn btn-secondary"

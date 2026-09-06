@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRightLeft, Check, Layers, Locate, Map as MapIcon, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { getPolygonCentroid } from '../utils/geoUtils';
+import { isDemoUser } from '../utils/userUtils';
 import MarketBuildingPins from './MarketBuildingPins';
 
 const MARKER_TYPES = {
@@ -979,7 +980,7 @@ export default function MapContainer({
         </div>
       )}
 
-      {currentUser?.role === 'admin' && !isDrawingZone && !isDrawingPath && (
+      {currentUser && currentUser.role !== 'viewer' && !isDemoUser(currentUser) && !isDrawingZone && !isDrawingPath && (
         <div style={styles.adminTriggers}>
           <button
             className="btn btn-primary"
