@@ -187,8 +187,9 @@ jobs:
           request = urllib.request.Request(
             "https://api.supabase.com/v1/projects/dewusorjwzhsdhrsrvbg/database/query",
             data=json.dumps({"query": sql}).encode("utf-8"),
-            headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
-                     "Content-Type": "application/json"},
+          headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
+                     "Content-Type": "application/json",
+                     "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)"},
           )
           with urllib.request.urlopen(request, timeout=60) as response:
             response.read()

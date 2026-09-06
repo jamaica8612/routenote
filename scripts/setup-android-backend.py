@@ -19,6 +19,7 @@ def request(path, method="GET", payload=None):
         headers={
             "Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
         },
     )
     try:
