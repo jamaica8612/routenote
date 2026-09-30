@@ -18,6 +18,11 @@ on:
         type: boolean
         required: false
         default: false
+      repair_google:
+        description: Restore the existing Google OAuth secret from a temporary CI secret
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -33,13 +38,13 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - name: Reject conflicting migration and deletion modes
-        if: ${{ (inputs.migrate_server_settings && inputs.delete_migrated_eventbot) || (inputs.probe_google && (inputs.migrate_server_settings || inputs.delete_migrated_eventbot)) }}
+        if: ${{ (inputs.migrate_server_settings && inputs.delete_migrated_eventbot) || (inputs.probe_google && (inputs.migrate_server_settings || inputs.delete_migrated_eventbot)) || (inputs.repair_google && (inputs.migrate_server_settings || inputs.delete_migrated_eventbot || inputs.probe_google)) }}
         run: |
           echo "conflictingMigrationDeletionModes" >&2
           exit 1
       - uses: actions/checkout@v4
       - name: Add RouteNote redirects while preserving existing auth settings
-        if: ${{ !inputs.migrate_server_settings && !inputs.delete_migrated_eventbot && !inputs.probe_google }}
+        if: ${{ !inputs.migrate_server_settings && !inputs.delete_migrated_eventbot && !inputs.probe_google && !inputs.repair_google }}
         run: python3 scripts/setup-android-backend.py
       - name: Migrate RouteNote server settings
         if: ${{ inputs.migrate_server_settings && !inputs.delete_migrated_eventbot }}
@@ -54,3 +59,8 @@ jobs:
       - name: Read-only Google provider diagnostics
         if: ${{ inputs.probe_google }}
         run: python3 scripts/probe-routenote-google.py
+      - name: Restore existing Google OAuth secret
+        if: ${{ inputs.repair_google }}
+        env:
+          ROUTENOTE_GOOGLE_CLIENT_SECRET: ${{ secrets.ROUTENOTE_GOOGLE_CLIENT_SECRET }}
+        run: python3 scripts/repair-routenote-google.py
