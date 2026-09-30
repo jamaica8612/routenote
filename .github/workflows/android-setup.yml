@@ -2,27 +2,6 @@ name: RouteNote Android setup
 
 on:
   workflow_dispatch:
-    inputs:
-      migrate_server_settings:
-        description: Copy RouteNote external secrets before adding redirects
-        type: boolean
-        required: false
-        default: false
-      delete_migrated_eventbot:
-        description: Delete the verified and backed-up old EventBot project only
-        type: boolean
-        required: false
-        default: false
-      probe_google:
-        description: Read-only Google provider diagnostics without exposing keys
-        type: boolean
-        required: false
-        default: false
-      repair_google:
-        description: Restore the existing Google OAuth secret from a temporary CI secret
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -37,30 +16,6 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
-      - name: Reject conflicting migration and deletion modes
-        if: ${{ (inputs.migrate_server_settings && inputs.delete_migrated_eventbot) || (inputs.probe_google && (inputs.migrate_server_settings || inputs.delete_migrated_eventbot)) || (inputs.repair_google && (inputs.migrate_server_settings || inputs.delete_migrated_eventbot || inputs.probe_google)) }}
-        run: |
-          echo "conflictingMigrationDeletionModes" >&2
-          exit 1
       - uses: actions/checkout@v4
       - name: Add RouteNote redirects while preserving existing auth settings
-        if: ${{ !inputs.migrate_server_settings && !inputs.delete_migrated_eventbot && !inputs.probe_google && !inputs.repair_google }}
         run: python3 scripts/setup-android-backend.py
-      - name: Migrate RouteNote server settings
-        if: ${{ inputs.migrate_server_settings && !inputs.delete_migrated_eventbot }}
-        env:
-          ROUTENOTE_MIGRATION_TOKEN: ${{ secrets.ROUTENOTE_MIGRATION_TOKEN }}
-        run: python3 scripts/migrate-routenote-settings.py
-      - name: Delete verified old EventBot project
-        if: ${{ inputs.delete_migrated_eventbot && !inputs.migrate_server_settings }}
-        env:
-          EVENTBOT_MIGRATION_VERIFIED: ${{ vars.EVENTBOT_MIGRATION_VERIFIED }}
-        run: python3 scripts/delete-migrated-eventbot-project.py
-      - name: Read-only Google provider diagnostics
-        if: ${{ inputs.probe_google }}
-        run: python3 scripts/probe-routenote-google.py
-      - name: Restore existing Google OAuth secret
-        if: ${{ inputs.repair_google }}
-        env:
-          ROUTENOTE_GOOGLE_CLIENT_SECRET: ${{ secrets.ROUTENOTE_GOOGLE_CLIENT_SECRET }}
-        run: python3 scripts/repair-routenote-google.py

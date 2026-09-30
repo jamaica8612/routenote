@@ -1,6 +1,6 @@
 # Route Note 배포 및 설정
 
-Route Note의 이관 대상은 Supabase 프로젝트 `xrrdokcjhjqdfvwtbenl`입니다. 실제 전환은 계정 대응과 데이터 검증이 끝난 뒤 진행합니다. 이 프로젝트에는 다른 앱의 `rn_*` 객체가 이미 있으므로 Route Note는 아래 이름만 사용합니다.
+Route Note는 Supabase 프로젝트 `xrrdokcjhjqdfvwtbenl`로 이관을 마쳤습니다. 이 프로젝트에는 다른 앱의 `rn_*` 객체가 이미 있으므로 Route Note는 아래 이름만 사용합니다.
 
 - 테이블·DB 함수·Realtime 채널: `routenote_*`
 - Edge Functions: `routenote-geocode`, `routenote-postcode-zone`, `routenote-zone-at-point`, `routenote-road-geometry`, `routenote-send-push`
@@ -19,9 +19,11 @@ Route Note의 이관 대상은 Supabase 프로젝트 `xrrdokcjhjqdfvwtbenl`입�
 
 ## Google 로그인
 
-대상 프로젝트의 기존 Google OAuth 제공자 설정과 Site URL은 보존합니다. Google Cloud의 승인된 리디렉션 URI에 대상 Supabase Auth의 callback URL(`https://xrrdokcjhjqdfvwtbenl.supabase.co/auth/v1/callback`)이 있는지 확인하고, Supabase Redirect URLs에 실제 앱 주소 `https://jamaica8612.github.io/routenote/`를 추가합니다. 로컬 테스트 주소는 필요할 때만 추가합니다.
+대상 프로젝트의 Google 제공자를 기존 RouteNote OAuth 클라이언트로 활성화했습니다. Site URL과 기존 Redirect URLs는 보존하고 실제 앱 주소와 네이티브 콜백을 추가했습니다. Google Cloud에는 `https://xrrdokcjhjqdfvwtbenl.supabase.co/auth/v1/callback`이 등록돼 있습니다. 이 OAuth 클라이언트는 RouteNote가 계속 사용하므로 원본 Supabase 프로젝트 삭제와 함께 삭제하지 않습니다.
 
-프로젝트가 바뀌면 기존 브라우저 세션은 새 프로젝트의 세션으로 사용할 수 없습니다. 이전 사용자와 데이터 연결을 검증한 뒤 대상 프로젝트에서 다시 로그인합니다.
+Management API의 Auth 조회값을 실제 OAuth 비밀키로 복사하지 않습니다. 이관에는 대시보드에서 확인한 기존 원본 키를 사용했습니다. 비밀키는 Git, 문서와 로그에 저장하지 않으며 이관용 임시 CI secret은 제거했습니다.
+
+이전 사용자 8명의 귀속을 유지했으며 같은 인증 이메일의 기존 계정 3명은 연결하고, 없는 계정 5명은 가져왔습니다. RouteNote는 별도 브라우저 저장 키 `routenote-auth-xrrdokcjhjqdfvwtbenl`을 사용하므로 다른 앱의 세션을 자동으로 이어받지 않습니다. 프로젝트가 바뀐 사용자는 Google로 다시 로그인합니다. 로그아웃은 해당 RouteNote 세션에만 적용합니다.
 
 ## 클라이언트 설정과 빌드
 
@@ -36,4 +38,4 @@ npm run build
 
 ## GitHub Pages 배포
 
-현재 Pages 설정은 `main` 브랜치의 `/docs`입니다. 준비된 workflow는 GitHub Actions 방식으로 `dist/`를 배포하므로 실제 전환 시 Pages Source도 맞춰야 합니다. 코드와 대상 프로젝트 준비가 완료되면 [배포 체크리스트](DEPLOYMENT.md)에 따라 배포하고 라이브 앱의 네트워크 요청이 대상 Supabase 프로젝트와 `routenote_*` 객체만 사용하는지 확인합니다.
+현재 Pages Source는 GitHub Actions이며 workflow가 `main`의 `dist/`를 배포합니다. [배포 체크리스트](DEPLOYMENT.md)에 따라 배포하고 라이브 앱의 요청이 대상 Supabase 프로젝트와 `routenote_*` 객체를 사용하는지 확인합니다. 원본 프로젝트와 일회성 이관 실행 도구는 정리됐습니다.
