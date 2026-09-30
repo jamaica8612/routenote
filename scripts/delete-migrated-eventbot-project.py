@@ -86,7 +86,7 @@ def verification_sql():
     return f"""WITH row_counts AS ({counts})
 SELECT
  (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND starts_with(table_name, 'routenote_')) AS table_count,
- (SELECT sum(rows) FROM row_counts) AS total_rows,
+ (SELECT sum(rows)::bigint FROM row_counts) AS total_rows,
  (SELECT rows FROM row_counts WHERE name = 'routenote_profiles') AS profiles,
  (SELECT rows FROM row_counts WHERE name = 'routenote_route_zones') AS zones,
  (SELECT rows FROM row_counts WHERE name = 'routenote_route_tips') AS tips,
