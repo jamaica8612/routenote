@@ -431,7 +431,7 @@ export default function App() {
       return;
     }
 
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   };
 
   const openTipDetail = (tip) => {
