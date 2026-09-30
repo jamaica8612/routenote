@@ -489,7 +489,7 @@ export default function MapContainer({
     const drawSavedPath = async () => {
       try {
         const { data: points, error } = await supabase
-          .from('rn_route_path_points')
+          .from('routenote_route_path_points')
           .select('*')
           .eq('path_id', activePathId)
           .order('order_index', { ascending: true });

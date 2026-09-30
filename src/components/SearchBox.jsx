@@ -102,7 +102,7 @@ export default function SearchBox({ onSelectResult, zones, tips }) {
 
         if (trimmedQuery.length >= 2) {
           const geocodeResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rn-geocode?query=${encodeURIComponent(trimmedQuery)}`,
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/routenote-geocode?query=${encodeURIComponent(trimmedQuery)}`,
             {
               method: 'GET',
               headers: {

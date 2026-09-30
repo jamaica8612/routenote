@@ -52,7 +52,7 @@ export async function enablePushNotifications(userId) {
 
   const json = subscription.toJSON();
   const { error } = await supabase
-    .from('rn_push_subscriptions')
+    .from('routenote_push_subscriptions')
     .upsert(
       {
         user_id: userId,
@@ -72,7 +72,7 @@ export async function enablePushNotifications(userId) {
 export async function sendPushForNotification(notificationId) {
   if (!notificationId) return;
   try {
-    await supabase.functions.invoke('rn-send-push', {
+    await supabase.functions.invoke('routenote-send-push', {
       body: { notificationId },
     });
   } catch (err) {

@@ -351,7 +351,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
 
       if (zone) {
         const { data: savedZone, error: updateError } = await supabase
-          .from('rn_route_zones')
+          .from('routenote_route_zones')
           .update({ ...payload, updated_at: new Date().toISOString() })
           .eq('id', zone.id)
           .select('*')
@@ -361,7 +361,7 @@ export default function ZoneForm({ zone, polygonCoords, currentUser, onSave, onC
         onSave(savedZone);
       } else {
         const { data: savedZone, error: insertError } = await supabase
-          .from('rn_route_zones')
+          .from('routenote_route_zones')
           .insert({ ...payload, created_by: dbUserId })
           .select('*')
           .single();

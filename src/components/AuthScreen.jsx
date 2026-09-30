@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { CheckCircle, Shield, MapPin, Truck, Key } from 'lucide-react';
 
-export default function AuthScreen({ onDemoLogin }) {
+export default function AuthScreen({ onDemoLogin, profileError }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [clickCount, setClickCount] = useState(0);
@@ -81,6 +81,7 @@ export default function AuthScreen({ onDemoLogin }) {
         </div>
 
         {error && <div style={styles.errorText}>{error}</div>}
+        {profileError && <div role="alert" style={styles.errorText}>사용자 프로필 준비 실패: {profileError}</div>}
 
         {/* Main Google Login Button */}
         <button

@@ -50,7 +50,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
   const fetchExistingPhotos = async (tipId) => {
     try {
       const { data, error } = await supabase
-        .from('rn_route_tip_photos') // [Prefix Update] route_tip_photos -> rn_route_tip_photos
+        .from('routenote_route_tip_photos') // [Prefix Update] route_tip_photos -> routenote_route_tip_photos
         .select('*')
         .eq('tip_id', tipId)
         .eq('is_deleted', false);
@@ -83,14 +83,14 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
         
         // 1. Upload to Supabase Storage Bucket
         const { data: storageData, error: uploadError } = await supabase.storage
-          .from('tip-photos')
+          .from('routenote-photos')
           .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) throw uploadError;
 
         // 2. Get Public URL
         const { data: { publicUrl } } = supabase.storage
-          .from('tip-photos')
+          .from('routenote-photos')
           .getPublicUrl(fileName);
 
         // 3. Keep in temporary state (will insert to DB upon form save, or if existing tip, upload instantly)
@@ -105,7 +105,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
         if (tip) {
           // If editing existing tip, save photo immediately to DB
           const { data: dbData, error: dbError } = await supabase
-            .from('rn_route_tip_photos') // [Prefix Update] route_tip_photos -> rn_route_tip_photos
+            .from('routenote_route_tip_photos') // [Prefix Update] route_tip_photos -> routenote_route_tip_photos
             .insert({
               tip_id: tip.id,
               storage_path: publicUrl,
@@ -151,7 +151,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
 
         // Soft delete in DB
         const { error } = await supabase
-          .from('rn_route_tip_photos') // [Prefix Update] route_tip_photos -> rn_route_tip_photos
+          .from('routenote_route_tip_photos') // [Prefix Update] route_tip_photos -> routenote_route_tip_photos
           .update({ is_deleted: true })
           .eq('id', photoToDelete.id);
 
@@ -185,7 +185,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
       if (tip) {
         // UPDATE Existing Tip
         const { data, error } = await supabase
-          .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
+          .from('routenote_route_tips') // [Prefix Update] route_tips -> routenote_route_tips
           .update({
             title: title.trim(),
             marker_type: markerType,
@@ -203,7 +203,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
       } else {
         // INSERT New Tip
         const { data, error } = await supabase
-          .from('rn_route_tips') // [Prefix Update] route_tips -> rn_route_tips
+          .from('routenote_route_tips') // [Prefix Update] route_tips -> routenote_route_tips
           .insert({
             title: title.trim(),
             marker_type: markerType,
@@ -233,7 +233,7 @@ export default function TipForm({ tip, lat, lng, zones, currentUser, onSave, onC
           }));
 
           const { error: photoDbError } = await supabase
-            .from('rn_route_tip_photos') // [Prefix Update] route_tip_photos -> rn_route_tip_photos
+            .from('routenote_route_tip_photos') // [Prefix Update] route_tip_photos -> routenote_route_tip_photos
             .insert(insertPayload);
           
           if (photoDbError) throw photoDbError;

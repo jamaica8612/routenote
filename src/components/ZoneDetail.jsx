@@ -28,14 +28,14 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
   const fetchZonePhotos = async () => {
     try {
       const { data, error } = await supabase
-        .from('rn_route_zone_photos')
+        .from('routenote_route_zone_photos')
         .select('*')
         .eq('zone_id', zone.id)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.warn('rn_route_zone_photos table query failed, falling back to zone.image_url:', error.message);
+        console.warn('routenote_route_zone_photos table query failed, falling back to zone.image_url:', error.message);
         setZonePhotos([]);
       } else {
         setZonePhotos(data || []);
@@ -50,7 +50,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
     setSavingMemo(true);
     try {
       const { error: dbError } = await supabase
-        .from('rn_route_zones')
+        .from('routenote_route_zones')
         .update({
           memo: memoText.trim(),
           updated_by: currentUser.id,
@@ -85,26 +85,26 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         const fileExt = file.name.split('.').pop();
         const fileName = `zones/${zone.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-        // 1. Upload file to Supabase Storage bucket 'tip-photos'
+        // 1. Upload file to Supabase Storage bucket 'routenote-photos'
         const { data: storageData, error: uploadError } = await supabase.storage
-          .from('tip-photos')
+          .from('routenote-photos')
           .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) throw uploadError;
 
         // 2. Get Public URL
         const { data: { publicUrl } } = supabase.storage
-          .from('tip-photos')
+          .from('routenote-photos')
           .getPublicUrl(fileName);
 
         if (!firstPublicUrl) {
           firstPublicUrl = publicUrl;
         }
 
-        // 3. Try to insert to rn_route_zone_photos
+        // 3. Try to insert to routenote_route_zone_photos
         try {
           const { data: dbData, error: dbError } = await supabase
-            .from('rn_route_zone_photos')
+            .from('routenote_route_zone_photos')
             .insert({
               zone_id: zone.id,
               storage_path: publicUrl,
@@ -116,18 +116,18 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
           if (!dbError && dbData) {
             uploadedPhotos.push(dbData);
           } else if (dbError) {
-            console.warn('Could not insert to rn_route_zone_photos:', dbError.message);
+            console.warn('Could not insert to routenote_route_zone_photos:', dbError.message);
           }
         } catch (dbErr) {
-          console.warn('rn_route_zone_photos insert threw error:', dbErr);
+          console.warn('routenote_route_zone_photos insert threw error:', dbErr);
         }
       }
 
-      // 4. Update the rn_route_zones table with the first image_url as a fallback
+      // 4. Update the routenote_route_zones table with the first image_url as a fallback
       const newImageUrl = uploadedPhotos.length > 0 ? uploadedPhotos[0].storage_path : (firstPublicUrl || zone.image_url);
       
       const { error: zoneUpdateError } = await supabase
-        .from('rn_route_zones')
+        .from('routenote_route_zones')
         .update({
           image_url: newImageUrl,
           updated_by: currentUser.id,
@@ -157,9 +157,9 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
     setUploading(true);
     try {
       if (photoObj.id) {
-        // Mark as deleted in rn_route_zone_photos
+        // Mark as deleted in routenote_route_zone_photos
         const { error: dbError } = await supabase
-          .from('rn_route_zone_photos')
+          .from('routenote_route_zone_photos')
           .update({ is_deleted: true })
           .eq('id', photoObj.id);
 
@@ -168,10 +168,10 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
         const updatedPhotos = zonePhotos.filter(p => p.id !== photoObj.id);
         setZonePhotos(updatedPhotos);
 
-        // Update rn_route_zones image_url fallback
+        // Update routenote_route_zones image_url fallback
         const newImageUrl = updatedPhotos.length > 0 ? updatedPhotos[0].storage_path : null;
         await supabase
-          .from('rn_route_zones')
+          .from('routenote_route_zones')
           .update({
             image_url: newImageUrl,
             updated_by: currentUser.id,
@@ -184,7 +184,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
       } else {
         // Fallback: delete the single image_url column
         const { error: dbError } = await supabase
-          .from('rn_route_zones')
+          .from('routenote_route_zones')
           .update({
             image_url: null,
             updated_by: currentUser.id,
@@ -215,7 +215,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
     setLoadingPaths(true);
     try {
       const { data, error } = await supabase
-        .from('rn_route_paths') // [Prefix Update] route_paths -> rn_route_paths
+        .from('routenote_route_paths') // [Prefix Update] route_paths -> routenote_route_paths
         .select('*')
         .eq('zone_id', zone.id)
         .eq('is_deleted', false);
@@ -234,7 +234,7 @@ export default function ZoneDetail({ zone, currentUser, tips, clickLat, clickLng
 
     try {
       const { error } = await supabase
-        .from('rn_route_paths') // [Prefix Update] route_paths -> rn_route_paths
+        .from('routenote_route_paths') // [Prefix Update] route_paths -> routenote_route_paths
         .update({ is_deleted: true })
         .eq('id', pathId);
 

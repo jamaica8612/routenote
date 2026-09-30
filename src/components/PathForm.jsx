@@ -39,7 +39,7 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
       if (path) {
         // UPDATE Existing Path
         const { error } = await supabase
-          .from('rn_route_paths') // [Prefix Update] route_paths -> rn_route_paths
+          .from('routenote_route_paths') // [Prefix Update] route_paths -> routenote_route_paths
           .update({
             name: name.trim(),
             memo: memo.trim(),
@@ -52,7 +52,7 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
       } else {
         // INSERT New Path
         const { data: pathData, error: pathError } = await supabase
-          .from('rn_route_paths') // [Prefix Update] route_paths -> rn_route_paths
+          .from('routenote_route_paths') // [Prefix Update] route_paths -> routenote_route_paths
           .insert({
             name: name.trim(),
             memo: memo.trim(),
@@ -76,7 +76,7 @@ export default function PathForm({ path, pathPoints, zoneId, currentUser, onSave
         }));
 
         const { error: pointsError } = await supabase
-          .from('rn_route_path_points') // [Prefix Update] route_path_points -> rn_route_path_points
+          .from('routenote_route_path_points') // [Prefix Update] route_path_points -> routenote_route_path_points
           .insert(pointsPayload);
 
         if (pointsError) throw pointsError;

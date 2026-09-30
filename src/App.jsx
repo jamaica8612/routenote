@@ -15,11 +15,14 @@ import ZoneForm from './components/ZoneForm';
 import { enablePushNotifications, getPushPermissionState, getPushSupportState, sendPushForNotification } from './utils/pushNotifications';
 import { isPointInPolygon } from './utils/geoUtils';
 import { getDbUserId, isDemoUser } from './utils/userUtils';
+import { ensureUserProfile } from './utils/profileUtils';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [profileError, setProfileError] = useState(null);
+  const profileRequestRef = useRef(0);
 
   const [zones, setZones] = useState([]);
   const [tips, setTips] = useState([]);
@@ -76,7 +79,7 @@ export default function App() {
 
   useEffect(() => {
     supabase
-      .from('rn_market_buildings')
+      .from('routenote_market_buildings')
       .select('code, name, sort_order, pos_lat, pos_lng, icon')
       .order('sort_order', { ascending: true })
       .then(({ data }) => {
@@ -95,6 +98,7 @@ export default function App() {
         if (session) {
           fetchUserProfile(session.user);
         } else {
+          profileRequestRef.current += 1;
           setAuthLoading(false);
         }
       } catch (err) {
@@ -113,13 +117,16 @@ export default function App() {
       if (session) {
         fetchUserProfile(session.user);
       } else {
+        profileRequestRef.current += 1;
         setCurrentUser(null);
+        setProfileError(null);
         setAuthLoading(false);
       }
     });
 
     return () => {
       mounted = false;
+      profileRequestRef.current += 1;
       subscription.unsubscribe();
     };
   }, []);
@@ -131,20 +138,20 @@ export default function App() {
 
     // Subscribe to database changes for realtime updates
     const channel = supabase
-      .channel('rn_realtime_changes')
+      .channel('routenote_realtime_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'rn_route_tips' },
+        { event: '*', schema: 'public', table: 'routenote_route_tips' },
         (payload) => {
-          console.log('Realtime change in rn_route_tips:', payload);
+          console.log('Realtime change in routenote_route_tips:', payload);
           fetchData();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'rn_route_zones' },
+        { event: '*', schema: 'public', table: 'routenote_route_zones' },
         (payload) => {
-          console.log('Realtime change in rn_route_zones:', payload);
+          console.log('Realtime change in routenote_route_zones:', payload);
           fetchData();
         }
       )
@@ -169,7 +176,7 @@ export default function App() {
 
     const fetchNotifications = async () => {
       const { data } = await supabase
-        .from('rn_notifications')
+        .from('routenote_notifications')
         .select('*')
         .eq('recipient_id', currentUser.id)
         .order('created_at', { ascending: false })
@@ -180,10 +187,10 @@ export default function App() {
     fetchNotifications();
 
     const notiChannel = supabase
-      .channel(`rn_noti_${currentUser.id}`)
+      .channel(`routenote_noti_${currentUser.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'rn_notifications', filter: `recipient_id=eq.${currentUser.id}` },
+        { event: 'INSERT', schema: 'public', table: 'routenote_notifications', filter: `recipient_id=eq.${currentUser.id}` },
         (payload) => {
           setNotifications((prev) => [payload.new, ...prev]);
           setUnreadCount((prev) => prev + 1);
@@ -207,8 +214,8 @@ export default function App() {
 
     const fetchAnnouncements = async () => {
       const { data, error } = await supabase
-        .from('rn_announcements')
-        .select('*, creator:rn_profiles!created_by(name)')
+        .from('routenote_announcements')
+        .select('*, creator:routenote_profiles!created_by(name)')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -221,13 +228,13 @@ export default function App() {
     fetchAnnouncements();
 
     const annChannel = supabase
-      .channel('rn_announcements_all')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rn_announcements' }, (payload) => {
+      .channel('routenote_announcements_all')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'routenote_announcements' }, (payload) => {
         const item = payload.new;
         setAnnouncements((prev) => [item, ...prev]);
         if (!isDismissed(item.id)) setAnnouncementModal(item);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rn_announcements' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'routenote_announcements' }, (payload) => {
         if (!payload.new.is_active) {
           setAnnouncements((prev) => prev.filter((a) => a.id !== payload.new.id));
         }
@@ -284,41 +291,33 @@ export default function App() {
   }, [zones]);
 
   const fetchUserProfile = async (authUser) => {
+    const requestId = ++profileRequestRef.current;
+    setProfileError(null);
     try {
-      const { data, error } = await supabase
-        .from('rn_profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
-
-      if (error) {
-        setCurrentUser({
-          id: authUser.id,
-          email: authUser.email,
-          name: authUser.user_metadata.name || authUser.email.split('@')[0],
-          role: 'member',
-        });
-      } else {
-        setCurrentUser(data);
-      }
+      const profile = await ensureUserProfile(supabase, authUser.id);
+      if (requestId !== profileRequestRef.current) return;
+      setCurrentUser(profile);
     } catch (err) {
+      if (requestId !== profileRequestRef.current) return;
       console.error('Error fetching user profile:', err);
+      setCurrentUser(null);
+      setProfileError([err.code, err.message || '알 수 없는 오류', err.details, err.hint].filter(Boolean).join(' · '));
     } finally {
-      setAuthLoading(false);
+      if (requestId === profileRequestRef.current) setAuthLoading(false);
     }
   };
 
   const fetchData = async () => {
     try {
       const { data: zoneData, error: zoneError } = await supabase
-        .from('rn_route_zones')
+        .from('routenote_route_zones')
         .select('*')
         .eq('is_deleted', false);
       if (zoneError) throw zoneError;
       setZones(zoneData || []);
 
       const { data: tipData, error: tipError } = await supabase
-        .from('rn_route_tips')
+        .from('routenote_route_tips')
         .select('*')
         .eq('is_deleted', false);
       if (tipError) throw tipError;
@@ -337,7 +336,7 @@ export default function App() {
       setUnreadCount(0);
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       await supabase
-        .from('rn_notifications')
+        .from('routenote_notifications')
         .update({ is_read: true })
         .eq('recipient_id', currentUser.id)
         .eq('is_read', false);
@@ -348,7 +347,7 @@ export default function App() {
     if (!announcementForm.title.trim() || announcementSaving) return;
     setAnnouncementSaving(true);
     try {
-      await supabase.from('rn_announcements').insert({
+      await supabase.from('routenote_announcements').insert({
         title: announcementForm.title.trim(),
         content: announcementForm.content.trim() || null,
         created_by: currentUser.id,
@@ -362,7 +361,7 @@ export default function App() {
   };
 
   const handleDeleteAnnouncement = async (id) => {
-    await supabase.from('rn_announcements').update({ is_active: false }).eq('id', id);
+    await supabase.from('routenote_announcements').update({ is_active: false }).eq('id', id);
     if (expandedAnnId === id) setExpandedAnnId(null);
   };
 
@@ -377,8 +376,8 @@ export default function App() {
     setAnnCommentInput('');
     if (annComments[id]) return;
     const { data } = await supabase
-      .from('rn_announcement_comments')
-      .select('*, author:rn_profiles!created_by(name)')
+      .from('routenote_announcement_comments')
+      .select('*, author:routenote_profiles!created_by(name)')
       .eq('announcement_id', id)
       .order('created_at', { ascending: true });
     setAnnComments((prev) => ({ ...prev, [id]: data || [] }));
@@ -389,9 +388,9 @@ export default function App() {
     setAnnCommentSaving(true);
     try {
       const { data } = await supabase
-        .from('rn_announcement_comments')
+        .from('routenote_announcement_comments')
         .insert({ announcement_id: announcementId, content: annCommentInput.trim(), created_by: currentUser.id })
-        .select('*, author:rn_profiles!created_by(name)')
+        .select('*, author:routenote_profiles!created_by(name)')
         .single();
       if (data) {
         setAnnComments((prev) => ({ ...prev, [announcementId]: [...(prev[announcementId] || []), data] }));
@@ -557,7 +556,7 @@ export default function App() {
   const ensurePresenceChannel = () => {
     if (presenceChannelRef.current) return;
 
-    presenceChannelRef.current = supabase.channel('rn_team_presence', {
+    presenceChannelRef.current = supabase.channel('routenote_team_presence', {
       config: { presence: { key: currentUser?.id || 'unknown' } },
     });
 
@@ -614,7 +613,7 @@ export default function App() {
     setLoadingShareMembers(true);
     try {
       const { data, error } = await supabase
-        .from('rn_profiles')
+        .from('routenote_profiles')
         .select('id, name, role')
         .neq('id', currentUser.id)
         .order('name');
@@ -653,7 +652,7 @@ export default function App() {
   const fetchLocationShareRequests = async () => {
     if (!currentUser || isDemoUser(currentUser)) return;
     const { data, error } = await supabase
-      .from('rn_location_share_requests')
+      .from('routenote_location_share_requests')
       .select('*')
       .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
       .in('status', ['pending', 'accepted'])
@@ -674,7 +673,7 @@ export default function App() {
   const notifyLocationShare = async ({ recipientId, type, message }) => {
     try {
       const { data, error } = await supabase
-        .from('rn_notifications')
+        .from('routenote_notifications')
         .insert({
           recipient_id: recipientId,
           sender_id: currentUser.id,
@@ -698,7 +697,7 @@ export default function App() {
 
     const recipient = locationShareMembers.find(member => member.id === recipientId);
     const { error } = await supabase
-      .from('rn_location_share_requests')
+      .from('routenote_location_share_requests')
       .insert({
         requester_id: currentUser.id,
         recipient_id: recipientId,
@@ -721,7 +720,7 @@ export default function App() {
   const acceptLocationShareRequest = async (request) => {
     const partnerId = getLocationSharePartnerId(request);
     const { error } = await supabase
-      .from('rn_location_share_requests')
+      .from('routenote_location_share_requests')
       .update({
         status: 'accepted',
         responded_at: new Date().toISOString(),
@@ -752,7 +751,7 @@ export default function App() {
     if (status === 'declined') patch.responded_at = new Date().toISOString();
 
     const { error } = await supabase
-      .from('rn_location_share_requests')
+      .from('routenote_location_share_requests')
       .update(patch)
       .eq('id', request.id);
 
@@ -772,10 +771,10 @@ export default function App() {
 
     fetchLocationShareRequests();
     const channel = supabase
-      .channel(`rn_location_share_requests_${currentUser.id}`)
+      .channel(`routenote_location_share_requests_${currentUser.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'rn_location_share_requests' },
+        { event: '*', schema: 'public', table: 'routenote_location_share_requests' },
         (payload) => {
           fetchLocationShareRequests();
           if (
@@ -808,7 +807,7 @@ export default function App() {
             onDelete={async (tipId) => {
               try {
                 const { error } = await supabase
-                  .from('rn_route_tips')
+                  .from('routenote_route_tips')
                   .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', tipId);
                 if (error) throw error;
@@ -870,7 +869,7 @@ export default function App() {
             onDelete={async (zoneId) => {
               try {
                 const { error } = await supabase
-                  .from('rn_route_zones')
+                  .from('routenote_route_zones')
                   .update({ is_deleted: true, updated_by: getDbUserId(currentUser) })
                   .eq('id', zoneId);
                 if (error) throw error;
@@ -1618,7 +1617,7 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <AuthScreen onDemoLogin={handleDemoLogin} />;
+    return <AuthScreen onDemoLogin={handleDemoLogin} profileError={profileError} />;
   }
 
   const visibleZoneIds = new Set([
@@ -1697,7 +1696,7 @@ export default function App() {
         editPins={editPins}
         onPinPositionChange={async (code, lat, lng) => {
           await supabase
-            .from('rn_market_buildings')
+            .from('routenote_market_buildings')
             .update({ pos_lat: lat, pos_lng: lng })
             .eq('code', code);
           setMarketBuildings(prev =>

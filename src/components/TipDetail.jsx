@@ -81,10 +81,10 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     }
 
     commentChannelRef.current = supabase
-      .channel(`tip_comments_${tip.id}`)
+      .channel(`routenote_tip_comments_${tip.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'rn_tip_comments', filter: `tip_id=eq.${tip.id}` },
+        { event: '*', schema: 'public', table: 'routenote_tip_comments', filter: `tip_id=eq.${tip.id}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             // 새 댓글: 작성자 이름 별도 조회 후 추가
@@ -115,7 +115,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const fetchPhotos = async () => {
     try {
       const { data, error } = await supabase
-        .from('rn_route_tip_photos')
+        .from('routenote_route_tip_photos')
         .select('*')
         .eq('tip_id', tip.id)
         .eq('is_deleted', false);
@@ -132,7 +132,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
       if (userIds.length === 0) return;
 
       const { data, error } = await supabase
-        .from('rn_profiles')
+        .from('routenote_profiles')
         .select('id, name')
         .in('id', userIds);
 
@@ -153,10 +153,10 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     setLoadingComments(true);
     try {
       const { data, error } = await supabase
-        .from('rn_tip_comments')
+        .from('routenote_tip_comments')
         .select(`
           id, tip_id, content, created_at, is_deleted, created_by,
-          rn_profiles ( id, name )
+          routenote_profiles ( id, name )
         `)
         .eq('tip_id', tip.id)
         .eq('is_deleted', false)
@@ -166,7 +166,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
       setComments(
         (data || []).map((c) => ({
           ...c,
-          author_name: c.rn_profiles?.name || '탈퇴 사용자',
+          author_name: c.routenote_profiles?.name || '탈퇴 사용자',
         }))
       );
     } catch (err) {
@@ -179,7 +179,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const fetchLikes = async () => {
     try {
       const { data, error } = await supabase
-        .from('rn_tip_likes')
+        .from('routenote_tip_likes')
         .select('id, created_by')
         .eq('tip_id', tip.id);
       if (error) throw error;
@@ -193,7 +193,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
   const fetchMembers = async () => {
     try {
       const { data, error } = await supabase
-        .from('rn_profiles')
+        .from('routenote_profiles')
         .select('id, name')
         .order('name');
       if (error) throw error;
@@ -207,7 +207,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     if (!comment.created_by) return { ...comment, author_name: '알 수 없음' };
     try {
       const { data } = await supabase
-        .from('rn_profiles')
+        .from('routenote_profiles')
         .select('id, name')
         .eq('id', comment.created_by)
         .single();
@@ -251,7 +251,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     try {
       // 댓글 등록 + ID 반환
       const { data: commentData, error } = await supabase
-        .from('rn_tip_comments')
+        .from('routenote_tip_comments')
         .insert({ tip_id: tip.id, content: trimmed, created_by: getDbUserId(currentUser) })
         .select()
         .single();
@@ -267,7 +267,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
         );
         if (mentioned.length > 0) {
           const { data: notificationRows, error: notificationError } = await supabase
-            .from('rn_notifications')
+            .from('routenote_notifications')
             .insert(
               mentioned.map((m) => ({
                 recipient_id: m.id,
@@ -295,7 +295,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     setDeletingCommentId(commentId);
     try {
       const { error } = await supabase
-        .from('rn_tip_comments')
+        .from('routenote_tip_comments')
         .update({ is_deleted: true })
         .eq('id', commentId);
       if (error) throw error;
@@ -323,7 +323,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     try {
       if (isLiked) {
         const { error } = await supabase
-          .from('rn_tip_likes')
+          .from('routenote_tip_likes')
           .delete()
           .eq('tip_id', tip.id)
           .eq('created_by', currentUser.id);
@@ -332,7 +332,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
         setLikeCount(prev => Math.max(0, prev - 1));
       } else {
         const { error } = await supabase
-          .from('rn_tip_likes')
+          .from('routenote_tip_likes')
           .insert({ tip_id: tip.id, created_by: currentUser.id });
         if (error) throw error;
         setIsLiked(true);
@@ -351,7 +351,7 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
       const now = new Date().toISOString();
       const dbUserId = getDbUserId(currentUser);
       const { error } = await supabase
-        .from('rn_route_tips')
+        .from('routenote_route_tips')
         .update({ last_verified_at: now, last_verified_by: dbUserId, updated_by: dbUserId })
         .eq('id', tip.id);
       if (error) throw error;
@@ -369,12 +369,12 @@ export default function TipDetail({ tip, currentUser, onEdit, onDelete, onVerifi
     setLoadingHistory(true);
     try {
       const { data, error } = await supabase
-        .from('rn_route_tip_history')
-        .select(`id, action, old_data, new_data, changed_at, rn_profiles ( name )`)
+        .from('routenote_route_tip_history')
+        .select(`id, action, old_data, new_data, changed_at, routenote_profiles ( name )`)
         .eq('tip_id', tip.id)
         .order('changed_at', { ascending: false });
       if (error) throw error;
-      setHistory((data || []).map((hist) => ({ ...hist, profiles: hist.rn_profiles })));
+      setHistory((data || []).map((hist) => ({ ...hist, profiles: hist.routenote_profiles })));
     } catch (err) {
       console.error(err);
     } finally {

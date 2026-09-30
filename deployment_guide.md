@@ -1,112 +1,39 @@
-# 구역노트 (Route Note) 배포 및 설정 가이드 (1개 프로젝트 공유용)
+# Route Note 배포 및 설정
 
-본 가이드는 Supabase 데이터베이스 설정, 에지 함수(Edge Functions) 배포, 로컬 실행 및 GitHub Pages 배포 방법을 설명합니다. 기존 Supabase 프로젝트에 얹어 쓰기 위해 모든 테이블에 `rn_` 접두사를 적용했습니다.
+Route Note의 이관 대상은 Supabase 프로젝트 `xrrdokcjhjqdfvwtbenl`입니다. 실제 전환은 계정 대응과 데이터 검증이 끝난 뒤 진행합니다. 이 프로젝트에는 다른 앱의 `rn_*` 객체가 이미 있으므로 Route Note는 아래 이름만 사용합니다.
 
----
+- 테이블·DB 함수·Realtime 채널: `routenote_*`
+- Edge Functions: `routenote-geocode`, `routenote-postcode-zone`, `routenote-zone-at-point`, `routenote-road-geometry`, `routenote-send-push`
+- 사진 버킷: `routenote-photos`
 
-## 1. Supabase 데이터베이스 및 보안 설정
+기존 `rn_*` 테이블·함수와 `tip-photos` 버킷을 Route Note용으로 재사용하거나 수정하지 않습니다. 과거 공유 프로젝트의 데이터를 옮길 때는 Route Note 데이터만 복사하고, 사용자 ID·외래 키·사진 경로·RLS·Realtime publication을 함께 검증합니다. 이메일이 기존 사용자와 겹치면 Auth 계정 대응을 확정한 뒤 연결합니다.
 
-1. **기존 Supabase 프로젝트 선택**: 이미 사용 중인 Supabase 프로젝트 중 하나를 선택합니다.
-2. **SQL 스키마 적용**:
-   - Supabase Dashboard의 **SQL Editor**로 이동하여 새 쿼리창을 엽니다.
-   - 프로젝트 폴더의 [supabase/schema.sql](file:///c:/work/routenote/supabase/schema.sql) 파일 내용을 전체 복사하여 붙여넣고 **Run** 버튼을 눌러 실행합니다.
-   - 이 쿼리는 `rn_profiles`, `rn_route_zones`, `rn_route_tips` 등 `rn_` 접두사가 달린 테이블들을 생성하며, 기존 테이블들과 충돌하지 않도록 완벽히 분리되어 안전합니다.
-3. **Storage 버킷 생성 (사진 첨부용)**:
-   - Dashboard의 **Storage** 메뉴로 이동합니다.
-   - **New bucket**을 클릭하여 버킷명을 `tip-photos`로 설정합니다. (기존에 이미 버킷이 있다면 그대로 사용하시면 됩니다.)
-   - 배송 기사들이 사진을 직접 조회 및 등록할 수 있도록 버킷 권한을 **Public**으로 설정합니다.
+## Supabase 준비
 
----
+1. 대상 프로젝트가 `xrrdokcjhjqdfvwtbenl`인지 확인합니다.
+2. 검토한 [전용 마이그레이션](supabase/migrations/20260930081141_isolate_routenote_schema.sql)만 적용합니다. `routenote_*` 이름이나 사진 버킷이 이미 있으면 덮어쓰지 않고 중단합니다. 기존 `schema.sql`이나 이전 `rn_*` 마이그레이션은 다른 앱과 충돌하므로 이 대상에서 실행하지 않습니다. 모든 새 테이블은 RLS를 사용하며 익명 사용자는 조회 권한만 받습니다.
+3. `routenote-photos` 버킷의 공개 조회와 인증 사용자 업로드 정책을 확인합니다. 기존 사진을 복사한 뒤 DB에 저장된 원본 프로젝트의 사진 URL도 대상 프로젝트와 새 버킷 URL로 옮깁니다. 클라이언트는 DB의 URL을 그대로 사용합니다.
+4. Route Note의 주소 검색·우편번호·도로 경계·푸시 함수만 새 이름으로 배포하고 필요한 서버 secrets를 설정합니다. 외부 API secrets는 `ROUTENOTE_NAVER_MAP_CLIENT_ID`, `ROUTENOTE_NAVER_MAP_CLIENT_SECRET`, `ROUTENOTE_VAPID_PUBLIC_KEY`, `ROUTENOTE_VAPID_PRIVATE_KEY`를 사용합니다. 서버 secrets와 서비스 키는 브라우저 환경 변수에 넣지 않습니다.
+5. 클라이언트에서 사용하는 모든 `routenote_*` 테이블에 필요한 Data API 권한과 RLS를 확인합니다. 변경 구독 대상 테이블은 Realtime publication에도 등록합니다.
+6. `routenote_ensure_profile()` RPC를 준비합니다. 로그인 사용자의 프로필이 없을 때만 클라이언트가 인자 없이 호출하며, RPC는 `auth.uid()`의 자기 프로필만 `member`로 생성하고 기존 프로필을 보존해야 합니다. 클라이언트는 생성 후 프로필을 다시 조회합니다. 실패하면 오류를 표시하고 로그인한 사용자 화면 진입을 중단합니다.
 
-## 2. 네이버 주소 검색 (Geocoding) Edge Function 배포
+## Google 로그인
 
-네이버 Geocoding API의 Client Secret 유출을 방지하기 위해 서버리스 함수(Deno)를 배포해야 합니다. 기존 기능들과 겹치지 않게 `rn-geocode` 로 명명합니다.
+대상 프로젝트의 기존 Google OAuth 제공자 설정과 Site URL은 보존합니다. Google Cloud의 승인된 리디렉션 URI에 대상 Supabase Auth의 callback URL(`https://xrrdokcjhjqdfvwtbenl.supabase.co/auth/v1/callback`)이 있는지 확인하고, Supabase Redirect URLs에 실제 앱 주소 `https://jamaica8612.github.io/routenote/`를 추가합니다. 로컬 테스트 주소는 필요할 때만 추가합니다.
 
-1. **Supabase CLI 설치 및 로그인** (설치되지 않은 경우):
-   ```bash
-   # npm으로 글로벌 설치
-   npm install -g supabase
-   # Supabase 계정 연동 로그인
-   supabase login
-   ```
-2. **Supabase 프로젝트 링크**:
-   ```bash
-   # 프로젝트 디렉토리 루트에서 실행
-   supabase link --project-ref <your-supabase-project-ref-id>
-   ```
-   *(프로젝트 Ref ID는 Supabase Settings -> General -> Reference ID에서 확인 가능)*
+프로젝트가 바뀌면 기존 브라우저 세션은 새 프로젝트의 세션으로 사용할 수 없습니다. 이전 사용자와 데이터 연결을 검증한 뒤 대상 프로젝트에서 다시 로그인합니다.
 
-3. **네이버 API 키를 Supabase Secrets에 등록**:
-   네이버 개발자 센터에서 획득한 Client ID와 Client Secret을 Supabase에 등록합니다. (이미 설정된 키가 있다면 이 단계를 건너뛰셔도 무방합니다.)
-   ```bash
-   supabase secrets set NAVER_MAP_CLIENT_ID="발급받은_네이버_클라이언트_ID"
-   supabase secrets set NAVER_MAP_CLIENT_SECRET="발급받은_네이버_클라이언트_시크릿"
-   ```
-4. **Edge Function 배포**:
-   주소 검색 및 우편번호 구역 경계 조회 기능에 필요한 서버리스 함수들을 배포합니다.
-   ```bash
-   supabase functions deploy rn-geocode
-   supabase functions deploy rn-postcode-zone
-   ```
-   배포 후 주소 검색 및 우편번호 기반 구역 생성 기능이 Supabase Edge Functions를 거쳐 정상적으로 경유 동작합니다.
+## 클라이언트 설정과 빌드
 
----
+배포 환경에 대상 프로젝트의 공개 클라이언트 설정을 넣습니다. `VITE_SUPABASE_URL`은 `https://xrrdokcjhjqdfvwtbenl.supabase.co`이며, 공개 키는 기존 `VITE_SUPABASE_ANON_KEY` 변수로 전달합니다. `VITE_NAVER_MAP_CLIENT_ID`도 기존 방식으로 설정합니다. 실제 키는 문서·Git·로그에 기록하지 않습니다.
 
-## 3. Google OAuth 로그인 설정
+```bash
+npm ci
+npm run build
+```
 
-1. **Google Cloud Console**에서 OAuth 클라이언트 ID(웹 애플리케이션)를 생성합니다.
-2. **승인된 리디렉션 URI**에 다음 주소들을 입력합니다.
-   - 로컬 테스트용: `http://localhost:5173` 및 `http://localhost:5173/`
-   - GitHub Pages 배포용: `https://<your-github-username>.github.io/routenote/`
-3. **Supabase Auth 설정**:
-   - Supabase Dashboard -> **Authentication** -> **Providers** -> **Google**로 이동합니다.
-   - Google 활성화(Enabled)를 켜고, 발급받은 Client ID와 Client Secret을 입력 후 저장합니다.
-   - 하단의 **Redirect URLs** 목록에 GitHub Pages 배포 도메인(`https://<your-github-username>.github.io/routenote/`)을 반드시 추가합니다.
+빌드 성공은 원격 DB·로그인·사진·함수 동작을 검증한 결과가 아닙니다. 배포 전에 대상 프로젝트에서 사용자 프로필, 구역·팁 조회, 사진 조회·업로드, 주소 검색, 알림·Realtime을 확인합니다.
 
----
+## GitHub Pages 배포
 
-## 4. 로컬 개발 및 실행
-
-1. **환경 변수 구성**:
-   - 프로젝트 루트의 `.env` 파일에 본인의 API 키 정보를 입력합니다.
-   ```env
-   VITE_SUPABASE_URL=https://<your-project-id>.supabase.co
-   VITE_SUPABASE_ANON_KEY=<your-anon-key>
-   VITE_NAVER_MAP_CLIENT_ID=<your-naver-map-client-id>
-   ```
-2. **의존성 설치 및 로컬 서버 실행**:
-   ```bash
-   npm install
-   npm run dev
-   ```
-   브라우저에서 `http://localhost:5173`으로 접속합니다. Google 로그인 연동 전이라면 **"테스트 모드"** 버튼을 통해 관리자 및 일반 기사님 권한으로 즉시 UI와 주요 지도의 기능을 확인해볼 수 있습니다.
-
----
-
-## 5. GitHub Pages 배포하기
-
-1. **package.json 수정**:
-   - [package.json](file:///c:/work/routenote/package.json) 파일 상단의 `homepage` 값을 본인의 깃허브 배포 경로로 수정합니다.
-   ```json
-   "homepage": "https://<your-github-username>.github.io/routenote",
-   ```
-2. **GitHub 저장소 생성 및 코드 Push**:
-   - GitHub에 `routenote` 라는 새로운 저장소를 만듭니다.
-   - 로컬 프로젝트 폴더에서 git을 연결하고 push합니다.
-   ```bash
-   git init
-   git add .
-   git commit -m "First commit with rn_ prefixes"
-   git branch -M main
-   git remote add origin https://github.com/<your-github-username>/routenote.git
-   git push -u origin main
-   ```
-3. **gh-pages 배포 명령어 실행**:
-   ```bash
-   npm run deploy
-   ```
-   이 명령은 프로젝트를 자동으로 빌드(`dist/` 폴더 생성)한 뒤, `gh-pages` 브랜치를 생성하여 정적 웹 자원을 자동으로 GitHub에 업로드합니다.
-4. **GitHub Pages 설정 활성화**:
-   - GitHub 레포지토리 Settings -> **Pages** 메뉴로 이동합니다.
-   - Build and deployment의 Source가 **Deploy from a branch**로 되어 있는지 확인하고, Branch를 **`gh-pages`** (`/root`)로 지정한 뒤 저장합니다.
-   - 약 1~2분 뒤 `https://<your-github-username>.github.io/routenote/` 경로에서 라이브 앱이 작동합니다.
+현재 Pages 설정은 `main` 브랜치의 `/docs`입니다. 준비된 workflow는 GitHub Actions 방식으로 `dist/`를 배포하므로 실제 전환 시 Pages Source도 맞춰야 합니다. 코드와 대상 프로젝트 준비가 완료되면 [배포 체크리스트](DEPLOYMENT.md)에 따라 배포하고 라이브 앱의 네트워크 요청이 대상 Supabase 프로젝트와 `routenote_*` 객체만 사용하는지 확인합니다.

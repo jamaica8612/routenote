@@ -772,8 +772,8 @@ function EditModal({ cell, buildingId, currentUser, onClose, onSaved }) {
   useEffect(() => {
     if (isInsert) return;
     supabase
-      .from('rn_market_stall_history')
-      .select('*, changer:rn_profiles(name)')
+      .from('routenote_market_stall_history')
+      .select('*, changer:routenote_profiles(name)')
       .eq('stall_id', cell.id)
       .order('changed_at', { ascending: false })
       .limit(10)
@@ -795,13 +795,13 @@ function EditModal({ cell, buildingId, currentUser, onClose, onSaved }) {
         notes: notes || null,
       };
       const { data, error } = await supabase
-        .from('rn_market_stalls')
+        .from('routenote_market_stalls')
         .insert(payload)
         .select()
         .single();
       if (error) { alert('추가 실패: ' + error.message); setSaving(false); return; }
       if (currentUser?.id && !String(currentUser.id).startsWith('preview-')) {
-        await supabase.from('rn_market_stall_history').insert({
+        await supabase.from('routenote_market_stall_history').insert({
           stall_id: data.id, changed_by: currentUser.id, change_type: 'create',
           old_data: null, new_data: payload,
         });
@@ -814,13 +814,13 @@ function EditModal({ cell, buildingId, currentUser, onClose, onSaved }) {
     const oldData = { vendor_name: cell.vendor_name, stall_number: cell.stall_number, notes: cell.notes };
     const newData = { vendor_name: vendorName || null, stall_number: stallNumber || null, notes: notes || null };
     const { error } = await supabase
-      .from('rn_market_stalls')
+      .from('routenote_market_stalls')
       .update({ ...newData, updated_at: new Date().toISOString() })
       .eq('id', cell.id);
     if (error) { alert('저장 실패: ' + error.message); setSaving(false); return; }
 
     if (currentUser?.id && !String(currentUser.id).startsWith('preview-')) {
-      await supabase.from('rn_market_stall_history').insert({
+      await supabase.from('routenote_market_stall_history').insert({
         stall_id: cell.id, changed_by: currentUser.id, change_type: 'update',
         old_data: oldData, new_data: newData,
       });
@@ -941,7 +941,7 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
   useEffect(() => {
     if (!isOpen) return;
     supabase
-      .from('rn_market_buildings')
+      .from('routenote_market_buildings')
       .select('*')
       .order('sort_order')
       .then(({ data }) => data && setBuildings(data));
@@ -953,14 +953,14 @@ export default function MarketMapModal({ isOpen, onClose, initialBuilding, curre
 
     setLoading(true);
     supabase
-      .from('rn_market_buildings')
+      .from('routenote_market_buildings')
       .select('id')
       .eq('code', activeBuilding)
       .single()
       .then(({ data: building }) => {
         if (!building) { setLoading(false); return; }
         return supabase
-          .from('rn_market_stalls')
+          .from('routenote_market_stalls')
           .select('*')
           .eq('building_id', building.id)
           .eq('is_deleted', false)

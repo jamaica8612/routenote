@@ -57,7 +57,7 @@ function normalizeZonePayload(raw) {
 }
 
 async function fetchViaSupabase(postcode) {
-  const { data, error } = await supabase.functions.invoke('rn-postcode-zone', {
+  const { data, error } = await supabase.functions.invoke('routenote-postcode-zone', {
     body: { postcode },
   });
 

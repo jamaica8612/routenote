@@ -1,12 +1,19 @@
-name: Supabase DB & Functions Deploy
+name: RouteNote Functions Deploy
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - 'supabase/functions/routenote-*/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/supabase-deploy.yml'
+
+permissions:
+  contents: read
 
 concurrency:
-  group: supabase-deploy
+  group: routenote-supabase-deploy
   cancel-in-progress: false
 
 jobs:
@@ -14,229 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-
-      - name: Apply announcement tables
+      # Schema/data/auth migration is a separate reviewed operation.
+      # Never replay schema.sql, legacy rn_* migrations, or seeds here.
+      - name: Deploy RouteNote functions only
         run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, os, sys
-
-          token = os.environ["SUPABASE_ACCESS_TOKEN"]
-          ref = "dewusorjwzhsdhrsrvbg"
-
-          sql = """
-          create table if not exists public.rn_announcements (
-            id uuid primary key default gen_random_uuid(),
-            title text not null check (char_length(title) > 0 and char_length(title) <= 100),
-            content text check (content is null or char_length(content) <= 500),
-            created_by uuid not null references public.rn_profiles(id) on delete cascade,
-            created_at timestamptz not null default now(),
-            is_active boolean not null default true
-          );
-
-          create index if not exists rn_announcements_active_idx
-            on public.rn_announcements (is_active, created_at desc);
-
-          alter table public.rn_announcements enable row level security;
-
-          do $$ begin
-            if not exists (select from pg_policies where tablename='rn_announcements' and policyname='rn_read_announcements_for_auth') then
-              execute 'create policy rn_read_announcements_for_auth on public.rn_announcements for select using (auth.role() = ''authenticated'')';
-            end if;
-          end $$;
-
-          do $$ begin
-            if not exists (select from pg_policies where tablename='rn_announcements' and policyname='rn_manage_announcements_admin') then
-              execute 'create policy rn_manage_announcements_admin on public.rn_announcements for all using (public.rn_is_admin(auth.uid())) with check (public.rn_is_admin(auth.uid()))';
-            end if;
-          end $$;
-
-          do $$ begin
-            perform pg_catalog.pg_publication_tables.pubname
-            from pg_catalog.pg_publication_tables
-            where pubname='supabase_realtime' and tablename='rn_announcements';
-            if not found then
-              alter publication supabase_realtime add table public.rn_announcements;
-            end if;
-          exception when others then null;
-          end $$;
-
-          create table if not exists public.rn_announcement_comments (
-            id uuid primary key default gen_random_uuid(),
-            announcement_id uuid not null references public.rn_announcements(id) on delete cascade,
-            content text not null check (char_length(content) > 0 and char_length(content) <= 300),
-            created_by uuid not null references public.rn_profiles(id) on delete cascade,
-            created_at timestamptz not null default now()
-          );
-
-          create index if not exists rn_ann_comments_ann_idx
-            on public.rn_announcement_comments (announcement_id, created_at);
-
-          alter table public.rn_announcement_comments enable row level security;
-
-          do $$ begin
-            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_read_ann_comments_for_auth') then
-              execute 'create policy rn_read_ann_comments_for_auth on public.rn_announcement_comments for select using (auth.role() = ''authenticated'')';
-            end if;
-          end $$;
-
-          do $$ begin
-            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_insert_own_ann_comment') then
-              execute 'create policy rn_insert_own_ann_comment on public.rn_announcement_comments for insert with check (auth.uid() = created_by)';
-            end if;
-          end $$;
-
-          do $$ begin
-            if not exists (select from pg_policies where tablename='rn_announcement_comments' and policyname='rn_delete_ann_comment') then
-              execute 'create policy rn_delete_ann_comment on public.rn_announcement_comments for delete using (auth.uid() = created_by or public.rn_is_admin(auth.uid()))';
-            end if;
-          end $$;
-          """
-
-          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
-          data = json.dumps({"query": sql}).encode("utf-8")
-          req = urllib.request.Request(url, data=data, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
-          })
-          try:
-            with urllib.request.urlopen(req) as resp:
-              print("Migration OK:", resp.read().decode())
-          except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            print(f"Migration HTTP {e.code}: {body}", file=sys.stderr)
-            sys.exit(1)
-          PYEOF
-
-      - name: Apply market map tables
-        run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, os, sys
-
-          token = os.environ["SUPABASE_ACCESS_TOKEN"]
-          ref = "dewusorjwzhsdhrsrvbg"
-
-          with open("supabase/migrations/20260528_market_map.sql") as f:
-            schema_sql = f.read()
-
-          with open("supabase/seeds/market_seed.sql") as f:
-            seed_sql = f.read()
-
-          def run_sql(sql, label):
-            url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
-            data = json.dumps({"query": sql}).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers={
-              "Authorization": f"Bearer {token}",
-              "Content-Type": "application/json",
-              "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
-            })
-            try:
-              with urllib.request.urlopen(req) as resp:
-                print(f"{label} OK:", resp.read().decode())
-            except urllib.error.HTTPError as e:
-              body = e.read().decode()
-              print(f"{label} HTTP {e.code}: {body}", file=sys.stderr)
-              sys.exit(1)
-
-          run_sql(schema_sql, "Market schema")
-          run_sql(seed_sql, "Market seed")
-          PYEOF
-
-      - name: Apply zone creator permissions
-        run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, os, sys
-
-          token = os.environ["SUPABASE_ACCESS_TOKEN"]
-          ref = "dewusorjwzhsdhrsrvbg"
-          with open("supabase/migrations/20260906120000_zone_creator_permissions.sql", encoding="utf-8") as f:
-            sql = f.read()
-
-          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
-          data = json.dumps({"query": sql}).encode("utf-8")
-          req = urllib.request.Request(url, data=data, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
-          })
-          try:
-            with urllib.request.urlopen(req) as resp:
-              print("Zone creator permissions:", resp.read().decode())
-          except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            print(f"Zone creator permissions HTTP {e.code}: {body}", file=sys.stderr)
-            sys.exit(1)
-          PYEOF
-
-      - name: Apply Android field permissions
-        run: |
-          python3 << 'PYEOF'
-          import json, os, urllib.request
-
-          with open("supabase/migrations/20260906035458_android_field_permissions.sql", encoding="utf-8-sig") as f:
-            sql = f.read()
-          with open("supabase/migrations/20260906035705_tip_creator_delete.sql", encoding="utf-8-sig") as f:
-            sql += "\n" + f.read()
-          request = urllib.request.Request(
-            "https://api.supabase.com/v1/projects/dewusorjwzhsdhrsrvbg/database/query",
-            data=json.dumps({"query": sql}).encode("utf-8"),
-          headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
-                     "Content-Type": "application/json",
-                     "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)"},
-          )
-          with urllib.request.urlopen(request, timeout=60) as response:
-            response.read()
-          print("Android field permissions applied")
-          PYEOF
-
-      - name: Deploy edge functions
-        run: |
-          supabase functions deploy rn-postcode-zone --project-ref dewusorjwzhsdhrsrvbg
-          supabase functions deploy rn-geocode --project-ref dewusorjwzhsdhrsrvbg
-          supabase functions deploy rn-road-geometry --project-ref dewusorjwzhsdhrsrvbg
-          supabase functions deploy rn-send-push --project-ref dewusorjwzhsdhrsrvbg
-
-      - name: Create announcement
-        run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, os, sys
-
-          token = os.environ["SUPABASE_ACCESS_TOKEN"]
-          ref = "dewusorjwzhsdhrsrvbg"
-
-          sql = (
-            "INSERT INTO public.rn_announcements (title, content, created_by, is_active) "
-            "SELECT '2026.05.28 업데이트', "
-            "'• 반여농산물시장 지도 추가 (청과물동/무배추동/양념동/화훼단지)\n"
-            "• 호수·상호명 검색 및 강조 표시\n"
-            "• 셀 클릭으로 상호명/호수 수정\n"
-            "• 수정이력 확인 가능', "
-            "p.id, true "
-            "FROM public.rn_profiles p "
-            "WHERE p.role = 'admin' "
-            "AND NOT EXISTS (SELECT 1 FROM public.rn_announcements WHERE title = '2026.05.28 업데이트') "
-            "LIMIT 1;"
-          )
-
-          url = f"https://api.supabase.com/v1/projects/{ref}/database/query"
-          data = json.dumps({"query": sql}).encode("utf-8")
-          req = urllib.request.Request(url, data=data, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; routenote-deploy/1.0)",
-          })
-          try:
-            with urllib.request.urlopen(req) as resp:
-              print("Announcement:", resp.read().decode())
-          except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            print(f"Announcement HTTP {e.code}: {body}", file=sys.stderr)
-            sys.exit(1)
-          PYEOF
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing SUPABASE_ACCESS_TOKEN" >&2; exit 1; }
+          supabase functions deploy routenote-geocode --project-ref xrrdokcjhjqdfvwtbenl
+          supabase functions deploy routenote-postcode-zone --project-ref xrrdokcjhjqdfvwtbenl
+          supabase functions deploy routenote-zone-at-point --project-ref xrrdokcjhjqdfvwtbenl
+          supabase functions deploy routenote-road-geometry --project-ref xrrdokcjhjqdfvwtbenl
+          supabase functions deploy routenote-send-push --project-ref xrrdokcjhjqdfvwtbenl
